@@ -9,6 +9,7 @@ import (
 	"os/signal"
 	"syscall"
 
+	"golang.org/x/image/font"
 	"qrun/lib/streamdeck"
 )
 
@@ -32,52 +33,60 @@ func main() {
 
 	dev.SetBrightness(80)
 
+	stripFont := streamdeck.LoadFace("fonts/AtkinsonHyperlegibleMono-Bold.ttf", 28)
+
 	rgb := [3]int{0, 0, 0}
-	fine := [3]bool{false, false, false}
-	labels := [3]string{"R", "G", "B"}
-	labelColors := [3]color.RGBA{
-		{255, 0, 0, 255},
-		{0, 255, 0, 255},
-		{0, 100, 255, 255},
+	hiNibble := [3]bool{false, false, false}
+	names := [3]string{"Red", "Green", "Blue"}
+	chanColors := [3]color.RGBA{
+		{255, 80, 80, 255},
+		{80, 255, 80, 255},
+		{80, 160, 255, 255},
 	}
+
+	m := dev.Model()
+	segW := m.LCDWidth / 4
+	half := m.LCDHeight / 2
 
 	updateLCD := func() {
-		c := color.RGBA{uint8(rgb[0]), uint8(rgb[1]), uint8(rgb[2]), 255}
-		dev.SetLCDColor(0, 0, dev.Model().LCDWidth, dev.Model().LCDHeight, c)
-	}
-
-	updateKey := func(i int) {
-		bg := color.RGBA{labelColors[i].R / 4, labelColors[i].G / 4, labelColors[i].B / 4, 255}
-		sz := dev.Model().KeySize
-		txt := streamdeck.TextImageWithFaceSized(streamdeck.MonoBoldSmall, sz, bg, labelColors[i], labels[i], fmt.Sprintf("%d", rgb[i]))
-		if fine[i] {
-			img := image.NewRGBA(image.Rect(0, 0, sz, sz))
-			draw.Draw(img, img.Bounds(), txt, image.Point{}, draw.Src)
-			border := labelColors[i]
-			b := 4
-			for y := 0; y < sz; y++ {
-				for x := 0; x < sz; x++ {
-					if x < b || x >= sz-b || y < b || y >= sz-b {
-						img.Set(x, y, border)
-					}
-				}
-			}
-			dev.SetKeyImage(i, img)
-		} else {
-			dev.SetKeyImage(i, txt)
-		}
-	}
-
-	updateAllKeys := func() {
+		bg := color.RGBA{uint8(rgb[0]), uint8(rgb[1]), uint8(rgb[2]), 255}
+		img := image.NewRGBA(image.Rect(0, 0, m.LCDWidth, m.LCDHeight))
+		draw.Draw(img, img.Bounds(), &image.Uniform{bg}, image.Point{}, draw.Src)
 		for i := 0; i < 3; i++ {
-			updateKey(i)
+			x0 := i * segW
+			x1 := (i + 1) * segW
+			cc := chanColors[i]
+
+			top := img.SubImage(image.Rect(x0, 0, x1, half)).(*image.RGBA)
+			streamdeck.DrawOutlinedText(top, stripFont, cc, color.Black, 2, names[i])
+
+			valStr := fmt.Sprintf("%03d %02x", rgb[i], rgb[i])
+			bot := img.SubImage(image.Rect(x0, half, x1, m.LCDHeight)).(*image.RGBA)
+			streamdeck.DrawOutlinedText(bot, stripFont, cc, color.Black, 2, valStr)
+
+			charW := font.MeasureString(stripFont, "0").Ceil()
+			fullW := font.MeasureString(stripFont, valStr).Ceil()
+			metrics := stripFont.Metrics()
+			lineH := metrics.Height.Ceil()
+			botH := m.LCDHeight - half
+			textX := x0 + (segW-fullW)/2
+			baseY := half + (botH-lineH)/2 + metrics.Ascent.Ceil() + 2
+
+			nibbleIdx := 5
+			if hiNibble[i] {
+				nibbleIdx = 4
+			}
+			ux := textX + nibbleIdx*charW
+			for x := ux; x < ux+charW; x++ {
+				img.Set(x, baseY, cc)
+			}
 		}
+		dev.SetLCDImage(0, 0, m.LCDWidth, m.LCDHeight, img)
 	}
 
 	updateLCD()
-	updateAllKeys()
 
-	for i := 3; i < dev.Model().Keys; i++ {
+	for i := 0; i < m.Keys; i++ {
 		dev.ClearKey(i)
 	}
 
@@ -97,17 +106,16 @@ func main() {
 			if ev.Encoder != nil && ev.Encoder.Encoder < 3 {
 				i := ev.Encoder.Encoder
 				if ev.Encoder.Delta != 0 {
-					delta := ev.Encoder.Delta
-					if !fine[i] {
-						delta *= 10
+					step := 1
+					if hiNibble[i] {
+						step = 16
 					}
-					rgb[i] = clamp(rgb[i] + delta)
+					rgb[i] = clamp(rgb[i] + ev.Encoder.Delta*step)
 					updateLCD()
-					updateKey(i)
 					fmt.Printf("R=%d G=%d B=%d\n", rgb[0], rgb[1], rgb[2])
 				} else if ev.Encoder.Pressed {
-					fine[i] = !fine[i]
-					updateKey(i)
+					hiNibble[i] = !hiNibble[i]
+					updateLCD()
 				}
 			}
 		case <-sig:

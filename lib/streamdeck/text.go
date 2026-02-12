@@ -28,17 +28,17 @@ var (
 )
 
 func init() {
-	MonoRegular = loadFace("fonts/AtkinsonHyperlegibleMono-Regular.ttf", 72)
-	MonoMedium = loadFace("fonts/AtkinsonHyperlegibleMono-Medium.ttf", 72)
-	MonoBold = loadFace("fonts/AtkinsonHyperlegibleMono-Bold.ttf", 72)
-	MonoRegularSmall = loadFace("fonts/AtkinsonHyperlegibleMono-Regular.ttf", 40)
-	MonoMediumSmall = loadFace("fonts/AtkinsonHyperlegibleMono-Medium.ttf", 40)
-	MonoBoldSmall = loadFace("fonts/AtkinsonHyperlegibleMono-Bold.ttf", 40)
-	Regular = loadFace("fonts/AtkinsonHyperlegible-Regular.ttf", 16)
-	Bold = loadFace("fonts/AtkinsonHyperlegible-Bold.ttf", 16)
+	MonoRegular = LoadFace("fonts/AtkinsonHyperlegibleMono-Regular.ttf", 72)
+	MonoMedium = LoadFace("fonts/AtkinsonHyperlegibleMono-Medium.ttf", 72)
+	MonoBold = LoadFace("fonts/AtkinsonHyperlegibleMono-Bold.ttf", 72)
+	MonoRegularSmall = LoadFace("fonts/AtkinsonHyperlegibleMono-Regular.ttf", 40)
+	MonoMediumSmall = LoadFace("fonts/AtkinsonHyperlegibleMono-Medium.ttf", 40)
+	MonoBoldSmall = LoadFace("fonts/AtkinsonHyperlegibleMono-Bold.ttf", 40)
+	Regular = LoadFace("fonts/AtkinsonHyperlegible-Regular.ttf", 16)
+	Bold = LoadFace("fonts/AtkinsonHyperlegible-Bold.ttf", 16)
 }
 
-func loadFace(path string, size float64) font.Face {
+func LoadFace(path string, size float64) font.Face {
 	data, err := fontFS.ReadFile(path)
 	if err != nil {
 		log.Fatalf("streamdeck: read font %s: %v", path, err)
@@ -58,7 +58,23 @@ func loadFace(path string, size float64) font.Face {
 	return face
 }
 
+func DrawOutlinedText(img *image.RGBA, face font.Face, fg color.Color, outline color.Color, thickness int, lines ...string) {
+	for dx := -thickness; dx <= thickness; dx++ {
+		for dy := -thickness; dy <= thickness; dy++ {
+			if dx == 0 && dy == 0 {
+				continue
+			}
+			drawTextOffset(img, face, outline, dx, dy, lines...)
+		}
+	}
+	drawTextOffset(img, face, fg, 0, 0, lines...)
+}
+
 func DrawText(img *image.RGBA, face font.Face, fg color.Color, lines ...string) {
+	drawTextOffset(img, face, fg, 0, 0, lines...)
+}
+
+func drawTextOffset(img *image.RGBA, face font.Face, fg color.Color, dx, dy int, lines ...string) {
 	metrics := face.Metrics()
 	lineHeight := metrics.Height.Ceil()
 	bounds := img.Bounds()
@@ -77,9 +93,75 @@ func DrawText(img *image.RGBA, face font.Face, fg color.Color, lines ...string) 
 			Dst:  img,
 			Src:  &image.Uniform{fg},
 			Face: face,
-			Dot:  fixed.P(bounds.Min.X+x, bounds.Min.Y+y),
+			Dot:  fixed.P(bounds.Min.X+x+dx, bounds.Min.Y+y+dy),
 		}
 		d.DrawString(line)
+	}
+}
+
+type TextSpan struct {
+	Text    string
+	Color   color.Color
+	Outline color.Color
+}
+
+func DrawOutlinedSpans(img *image.RGBA, face font.Face, defaultOutline color.Color, thickness int, lines ...[]TextSpan) {
+	var full []string
+	for _, line := range lines {
+		s := ""
+		for _, span := range line {
+			s += span.Text
+		}
+		full = append(full, s)
+	}
+
+	metrics := face.Metrics()
+	lineHeight := metrics.Height.Ceil()
+	bounds := img.Bounds()
+	w := bounds.Dx()
+	h := bounds.Dy()
+	totalHeight := lineHeight * len(lines)
+	startY := (h-totalHeight)/2 + metrics.Ascent.Ceil()
+
+	for dx := -thickness; dx <= thickness; dx++ {
+		for dy := -thickness; dy <= thickness; dy++ {
+			if dx == 0 && dy == 0 {
+				continue
+			}
+			for i, line := range lines {
+				width := font.MeasureString(face, full[i]).Ceil()
+				x := (w - width) / 2
+				y := startY + i*lineHeight
+				d := &font.Drawer{
+					Dst:  img,
+					Face: face,
+					Dot:  fixed.P(bounds.Min.X+x+dx, bounds.Min.Y+y+dy),
+				}
+				for _, span := range line {
+					ol := defaultOutline
+					if span.Outline != nil {
+						ol = span.Outline
+					}
+					d.Src = &image.Uniform{ol}
+					d.DrawString(span.Text)
+				}
+			}
+		}
+	}
+
+	for i, line := range lines {
+		width := font.MeasureString(face, full[i]).Ceil()
+		x := (w - width) / 2
+		y := startY + i*lineHeight
+		d := &font.Drawer{
+			Dst:  img,
+			Face: face,
+			Dot:  fixed.P(bounds.Min.X+x, bounds.Min.Y+y),
+		}
+		for _, span := range line {
+			d.Src = &image.Uniform{span.Color}
+			d.DrawString(span.Text)
+		}
 	}
 }
 

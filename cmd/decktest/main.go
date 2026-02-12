@@ -10,6 +10,13 @@ import (
 	"qrun/lib/streamdeck"
 )
 
+var keyLabels = []string{
+	"1", "2", "3", "4", "5", "6", "7", "8",
+	"A", "B", "C", "D", "E", "F", "G", "H",
+	"I", "J", "K", "L", "M", "N", "O", "P",
+	"Q", "R", "S", "T", "U", "V", "W", "X",
+}
+
 var palette = []color.RGBA{
 	{220, 50, 50, 255},
 	{50, 180, 50, 255},
@@ -21,29 +28,13 @@ var palette = []color.RGBA{
 	{100, 100, 200, 255},
 }
 
-func labelForKey(key int) string {
-	row := key / streamdeck.KeyCols()
+func drawKey(dev *streamdeck.Device, key int, active bool) {
 	col := key % streamdeck.KeyCols()
-	switch row {
-	case 0:
-		return fmt.Sprintf("Ch %d\nSelect", col+1)
-	case 1:
-		return fmt.Sprintf("Ch %d\nMute", col+1)
-	case 2:
-		return fmt.Sprintf("Ch %d\nSolo", col+1)
-	case 3:
-		return fmt.Sprintf("Ch %d\nRec", col+1)
+	bg := palette[col]
+	if !active {
+		bg = color.RGBA{bg.R / 3, bg.G / 3, bg.B / 3, 255}
 	}
-	return fmt.Sprintf("Key %d", key)
-}
-
-func drawKey(dev *streamdeck.Device, key int, bg color.RGBA) {
-	dim := color.RGBA{bg.R / 3, bg.G / 3, bg.B / 3, 255}
-	dev.SetKeyText(key, dim, color.White, labelForKey(key))
-}
-
-func drawKeyActive(dev *streamdeck.Device, key int, bg color.RGBA) {
-	dev.SetKeyText(key, bg, color.White, labelForKey(key))
+	dev.SetKeyText(key, bg, color.White, keyLabels[key])
 }
 
 func main() {
@@ -59,8 +50,7 @@ func main() {
 	dev.SetBrightness(80)
 
 	for i := 0; i < streamdeck.KeyCount(); i++ {
-		col := i % streamdeck.KeyCols()
-		drawKey(dev, i, palette[col])
+		drawKey(dev, i, false)
 	}
 
 	active := make([]bool, streamdeck.KeyCount())
@@ -81,14 +71,9 @@ func main() {
 			if !ev.Pressed {
 				continue
 			}
-			col := ev.Key % streamdeck.KeyCols()
 			active[ev.Key] = !active[ev.Key]
-			if active[ev.Key] {
-				drawKeyActive(dev, ev.Key, palette[col])
-			} else {
-				drawKey(dev, ev.Key, palette[col])
-			}
-			fmt.Printf("Key %d toggled %v\n", ev.Key, active[ev.Key])
+			drawKey(dev, ev.Key, active[ev.Key])
+			fmt.Printf("Key %s toggled %v\n", keyLabels[ev.Key], active[ev.Key])
 		case <-sig:
 			fmt.Println()
 			return

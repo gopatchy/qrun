@@ -17,17 +17,23 @@ import (
 var fontFS embed.FS
 
 var (
-	MonoRegular font.Face
-	MonoMedium  font.Face
-	MonoBold    font.Face
-	Regular     font.Face
-	Bold        font.Face
+	MonoRegular      font.Face
+	MonoMedium       font.Face
+	MonoBold         font.Face
+	MonoRegularSmall font.Face
+	MonoMediumSmall  font.Face
+	MonoBoldSmall    font.Face
+	Regular          font.Face
+	Bold             font.Face
 )
 
 func init() {
 	MonoRegular = loadFace("fonts/AtkinsonHyperlegibleMono-Regular.ttf", 72)
 	MonoMedium = loadFace("fonts/AtkinsonHyperlegibleMono-Medium.ttf", 72)
 	MonoBold = loadFace("fonts/AtkinsonHyperlegibleMono-Bold.ttf", 72)
+	MonoRegularSmall = loadFace("fonts/AtkinsonHyperlegibleMono-Regular.ttf", 40)
+	MonoMediumSmall = loadFace("fonts/AtkinsonHyperlegibleMono-Medium.ttf", 40)
+	MonoBoldSmall = loadFace("fonts/AtkinsonHyperlegibleMono-Bold.ttf", 40)
 	Regular = loadFace("fonts/AtkinsonHyperlegible-Regular.ttf", 16)
 	Bold = loadFace("fonts/AtkinsonHyperlegible-Bold.ttf", 16)
 }
@@ -91,6 +97,11 @@ func TextImageWithFaceSized(face font.Face, size int, bg color.Color, fg color.C
 func (d *Device) SetKeyText(key int, bg color.Color, fg color.Color, text string) error {
 	lines := strings.Split(text, "\n")
 	return d.SetKeyImage(key, TextImageSized(d.model.KeySize, bg, fg, lines...))
+}
+
+func (d *Device) SetKeyTextWithFace(key int, face font.Face, bg color.Color, fg color.Color, text string) error {
+	lines := strings.Split(text, "\n")
+	return d.SetKeyImage(key, TextImageWithFaceSized(face, d.model.KeySize, bg, fg, lines...))
 }
 
 func (d *Device) SetKeyBoldText(key int, bg color.Color, fg color.Color, text string) error {

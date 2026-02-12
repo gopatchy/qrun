@@ -181,10 +181,10 @@ func (d *Device) ClearAllKeys() error {
 
 func (d *Device) sendKeyImage(key byte, imgData []byte) error {
 	reportLen := d.dev.GetOutputReportLength()
-	hdrLen := uint16(8)
+	hdrLen := uint16(7)
 	payloadLen := reportLen - hdrLen
 
-	var page uint16
+	var page byte
 	for start := uint16(0); start < uint16(len(imgData)); page++ {
 		end := start + payloadLen
 		last := byte(0)
@@ -195,14 +195,13 @@ func (d *Device) sendKeyImage(key byte, imgData []byte) error {
 
 		chunk := imgData[start:end]
 		hdr := []byte{
-			0x02,
 			0x07,
 			key,
 			last,
 			byte(len(chunk)),
 			byte(len(chunk) >> 8),
-			byte(page),
-			byte(page >> 8),
+			page,
+			0,
 		}
 
 		payload := append(hdr, chunk...)
@@ -241,10 +240,10 @@ func (d *Device) SetLCDColor(x, y, w, h int, c color.Color) error {
 
 func (d *Device) sendLCDImage(x, y, w, h uint16, imgData []byte) error {
 	reportLen := d.dev.GetOutputReportLength()
-	hdrLen := uint16(16)
+	hdrLen := uint16(15)
 	payloadLen := reportLen - hdrLen
 
-	var page uint16
+	var page byte
 	for start := uint16(0); start < uint16(len(imgData)); page++ {
 		end := start + payloadLen
 		last := byte(0)
@@ -254,17 +253,22 @@ func (d *Device) sendLCDImage(x, y, w, h uint16, imgData []byte) error {
 		}
 
 		chunk := imgData[start:end]
-		hdr := make([]byte, 16)
-		hdr[0] = 0x02
-		hdr[1] = 0x0C
-		binary.LittleEndian.PutUint16(hdr[2:], x)
-		binary.LittleEndian.PutUint16(hdr[4:], y)
-		binary.LittleEndian.PutUint16(hdr[6:], w)
-		binary.LittleEndian.PutUint16(hdr[8:], h)
-		hdr[10] = last
-		binary.LittleEndian.PutUint16(hdr[11:], page)
-		binary.LittleEndian.PutUint16(hdr[13:], uint16(len(chunk)))
-		hdr[15] = 0
+		hdr := make([]byte, 15)
+		hdr[0] = 0x0C
+		hdr[1] = byte(x)
+		hdr[2] = byte(x >> 8)
+		hdr[3] = byte(y)
+		hdr[4] = byte(y >> 8)
+		hdr[5] = byte(w)
+		hdr[6] = byte(w >> 8)
+		hdr[7] = byte(h)
+		hdr[8] = byte(h >> 8)
+		hdr[9] = last
+		hdr[10] = page
+		hdr[11] = 0
+		hdr[12] = byte(len(chunk))
+		hdr[13] = byte(len(chunk) >> 8)
+		hdr[14] = 0
 
 		payload := append(hdr, chunk...)
 		padding := make([]byte, reportLen-uint16(len(payload)))

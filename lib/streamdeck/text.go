@@ -77,16 +77,12 @@ func DrawText(img *image.RGBA, face font.Face, fg color.Color, lines ...string) 
 	}
 }
 
-func TextImage(bg color.Color, fg color.Color, lines ...string) image.Image {
-	return TextImageWithFace(MonoMedium, bg, fg, lines...)
+func TextImageSized(size int, bg color.Color, fg color.Color, lines ...string) image.Image {
+	return TextImageWithFaceSized(MonoMedium, size, bg, fg, lines...)
 }
 
-func BoldTextImage(bg color.Color, fg color.Color, lines ...string) image.Image {
-	return TextImageWithFace(MonoBold, bg, fg, lines...)
-}
-
-func TextImageWithFace(face font.Face, bg color.Color, fg color.Color, lines ...string) image.Image {
-	img := image.NewRGBA(image.Rect(0, 0, keySize, keySize))
+func TextImageWithFaceSized(face font.Face, size int, bg color.Color, fg color.Color, lines ...string) image.Image {
+	img := image.NewRGBA(image.Rect(0, 0, size, size))
 	draw.Draw(img, img.Bounds(), &image.Uniform{bg}, image.Point{}, draw.Src)
 	DrawText(img, face, fg, lines...)
 	return img
@@ -94,10 +90,10 @@ func TextImageWithFace(face font.Face, bg color.Color, fg color.Color, lines ...
 
 func (d *Device) SetKeyText(key int, bg color.Color, fg color.Color, text string) error {
 	lines := strings.Split(text, "\n")
-	return d.SetKeyImage(key, TextImage(bg, fg, lines...))
+	return d.SetKeyImage(key, TextImageSized(d.model.KeySize, bg, fg, lines...))
 }
 
 func (d *Device) SetKeyBoldText(key int, bg color.Color, fg color.Color, text string) error {
 	lines := strings.Split(text, "\n")
-	return d.SetKeyImage(key, BoldTextImage(bg, fg, lines...))
+	return d.SetKeyImage(key, TextImageWithFaceSized(MonoBold, d.model.KeySize, bg, fg, lines...))
 }

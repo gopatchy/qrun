@@ -8,7 +8,7 @@ import (
 	"os/signal"
 	"syscall"
 
-	"qrun/streamdeck"
+	"qrun/lib/streamdeck"
 )
 
 func main() {

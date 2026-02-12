@@ -9,7 +9,7 @@ import (
 	"gitlab.com/gomidi/midi/v2"
 	_ "gitlab.com/gomidi/midi/v2/drivers/rtmididrv"
 
-	"qrun/xtouch"
+	"qrun/lib/xtouch"
 )
 
 var lcdColors = []xtouch.LCDColor{

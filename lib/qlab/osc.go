@@ -91,7 +91,7 @@ func parseOSC(data []byte) (addr string, args []any, err error) {
 		ttEnd++
 	}
 	typetag := string(data[pos+1 : ttEnd])
-	pos = ttEnd + 1 + oscPad(ttEnd-pos)
+	pos = ttEnd + 1 + oscPad(ttEnd-pos+1)
 
 	for _, t := range typetag {
 		switch t {

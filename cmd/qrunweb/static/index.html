@@ -1,0 +1,340 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Qrun</title>
+<style>
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+:root {
+  --bg: #111;
+  --bg2: #1a1a1a;
+  --fg: #eee;
+  --fg-dim: #888;
+  --border: #333;
+  --cue-color: #f72;
+  --cue-bg: rgba(58, 24, 0, 0.7);
+  --light-color: #c8e;
+  --light-bg: rgba(42, 10, 42, 0.55);
+  --video-color: #4d4;
+  --video-bg: rgba(10, 42, 10, 0.55);
+  --overlay-color: #2cb;
+  --overlay-bg: rgba(10, 34, 34, 0.55);
+  --audio-color: #58f;
+  --audio-bg: rgba(10, 10, 42, 0.55);
+  --delay-color: #999;
+  --delay-bg: rgba(26, 26, 26, 0.55);
+  --current-row: #2a3a1a;
+  --infinity-color: #666;
+}
+
+html, body {
+  background: var(--bg);
+  color: var(--fg);
+  font-family: "SF Mono", "Menlo", "Consolas", "DejaVu Sans Mono", monospace;
+  font-size: 13px;
+  line-height: 1.4;
+  height: 100%;
+  overflow: hidden;
+}
+
+.app { display: flex; flex-direction: column; height: 100%; }
+
+header {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 8px 16px; background: var(--bg2);
+  border-bottom: 1px solid var(--border); flex-shrink: 0;
+}
+header h1 { font-size: 16px; font-weight: 600; letter-spacing: 0.05em; }
+.header-status { display: flex; gap: 16px; align-items: center; font-size: 12px; color: var(--fg-dim); }
+.status-dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; background: #4d4; margin-right: 4px; }
+
+.timeline-container { flex: 1; overflow: auto; }
+
+.timeline {
+  display: grid;
+  grid-template-columns: repeat(6, 140px);
+  grid-auto-rows: 24px;
+}
+
+.track-header {
+  position: sticky; top: 0; z-index: 10;
+  padding: 6px 8px; font-size: 10px; font-weight: 600;
+  text-transform: uppercase; letter-spacing: 0.08em; text-align: center;
+  border-bottom: 2px solid var(--border); border-right: 1px solid var(--border);
+  background: var(--bg2); color: var(--fg-dim);
+}
+
+.cell {
+  border-right: 1px solid var(--border);
+  border-bottom: 1px solid var(--border);
+  padding: 0; position: relative;
+  display: flex; flex-direction: column;
+  justify-content: center;
+}
+.cell.row-current {
+  background: var(--current-row);
+  box-shadow: inset 0 0 0 1px rgba(80, 200, 80, 0.25);
+}
+
+.block {
+  margin: 0 3px; position: relative; z-index: 1; flex: 1;
+  display: flex; align-items: center; justify-content: center;
+}
+.block-start {
+  border-top: 2px solid; border-left: 2px solid; border-right: 2px solid;
+  border-top-left-radius: 3px; border-top-right-radius: 3px;
+  margin-top: 2px; margin-bottom: -1px;
+}
+.block-mid {
+  border-left: 2px solid; border-right: 2px solid;
+  margin-top: -1px; margin-bottom: -1px; min-height: 4px;
+}
+.block-end {
+  border-bottom: 2px solid; border-left: 2px solid; border-right: 2px solid;
+  border-bottom-left-radius: 3px; border-bottom-right-radius: 3px;
+  margin-top: -1px; margin-bottom: 2px;
+}
+.block-single {
+  border: 2px solid; border-radius: 3px; margin: 2px 3px;
+}
+
+.block.cue { color: var(--cue-color); border-color: var(--cue-color); background: var(--cue-bg); }
+.block.light { color: var(--light-color); border-color: var(--light-color); background: var(--light-bg); }
+.block.video { color: var(--video-color); border-color: var(--video-color); background: var(--video-bg); }
+.block.overlay { color: var(--overlay-color); border-color: var(--overlay-color); background: var(--overlay-bg); }
+.block.audio { color: var(--audio-color); border-color: var(--audio-color); background: var(--audio-bg); }
+.block.delay { color: var(--delay-color); border-color: var(--delay-color); background: var(--delay-bg); }
+
+.hook {
+  font-size: 8px; font-weight: 600; text-transform: uppercase;
+  letter-spacing: 0.06em; opacity: 0.8;
+}
+
+.title {
+  text-align: center; font-size: 11px; font-weight: 500;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+
+.cue-label {
+  font-size: 10px; font-weight: 600;
+}
+
+.infinity-cell { position: relative; overflow: hidden; }
+.infinity-cell .block { border-bottom: none !important; border-bottom-left-radius: 0 !important; border-bottom-right-radius: 0 !important; }
+.infinity-marker {
+  position: absolute; bottom: 2px; left: 50%; transform: translateX(-50%);
+  font-size: 9px; color: var(--infinity-color);
+  letter-spacing: 0.1em; z-index: 1; white-space: nowrap;
+}
+</style>
+</head>
+<body>
+<div class="app">
+<header>
+  <h1>QRUN</h1>
+  <div class="header-status">
+    <span><span class="status-dot"></span>QLab Connected</span>
+    <span>Show: The Tempest</span>
+    <span>Cue: 12 / 47</span>
+  </div>
+</header>
+<div class="timeline-container">
+<div class="timeline">
+
+<div class="track-header">Cue</div>
+<div class="track-header">Lighting A</div>
+<div class="track-header">Lighting B</div>
+<div class="track-header">Video</div>
+<div class="track-header">Video OVL</div>
+<div class="track-header">Audio</div>
+
+<!-- R1: Q10 GO, Preshow Wash start, Warm 70% start, Preshow Loop start, Preshow Music start -->
+<div class="cell"><div class="block block-single cue"><div class="cue-label">Q10 Preshow</div></div></div>
+<div class="cell"><div class="block block-start light"><div class="hook">start</div></div></div>
+<div class="cell"><div class="block block-start light"><div class="hook">start</div></div></div>
+<div class="cell"><div class="block block-start video"><div class="hook">start</div></div></div>
+<div class="cell"></div>
+<div class="cell"><div class="block block-start audio"><div class="hook">start</div></div></div>
+<!-- R3: titles: Preshow Wash, Warm 70%, Preshow Loop, Preshow Music -->
+<div class="cell"></div>
+<div class="cell"><div class="block block-mid light"><div class="title">Preshow Wash</div></div></div>
+<div class="cell"><div class="block block-mid light"><div class="title">Warm 70%</div></div></div>
+<div class="cell"><div class="block block-mid video"><div class="title">Preshow Loop</div></div></div>
+<div class="cell"></div>
+<div class="cell"><div class="block block-mid audio"><div class="title">Preshow Music</div></div></div>
+<!-- R4: Q11 GO, Warm 70% fade out -->
+<div class="cell"><div class="block block-single cue"><div class="cue-label">Q11 House Open</div></div></div>
+<div class="cell"><div class="block block-mid light"></div></div>
+<div class="cell"><div class="block block-mid light"><div class="hook">fade out</div></div></div>
+<div class="cell"><div class="block block-mid video"></div></div>
+<div class="cell"></div>
+<div class="cell"><div class="block block-mid audio"></div></div>
+<!-- R6: Warm 70% end -->
+<div class="cell"></div>
+<div class="cell"><div class="block block-mid light"></div></div>
+<div class="cell"><div class="block block-end light"><div class="hook">end</div></div></div>
+<div class="cell"><div class="block block-mid video"></div></div>
+<div class="cell"></div>
+<div class="cell"><div class="block block-mid audio"></div></div>
+<!-- R7: Cool 50% start -->
+<div class="cell"></div>
+<div class="cell"><div class="block block-mid light"></div></div>
+<div class="cell"><div class="block block-start light"><div class="hook">start</div></div></div>
+<div class="cell"><div class="block block-mid video"></div></div>
+<div class="cell"></div>
+<div class="cell"><div class="block block-mid audio"></div></div>
+<!-- R8: Q12 GO current, Preshow fades -->
+<div class="cell row-current"><div class="block block-single cue"><div class="cue-label" style="font-weight:700">Q12 Top of Show</div></div></div>
+<div class="cell row-current"><div class="block block-mid light"><div class="hook">fade out</div></div></div>
+<div class="cell row-current"><div class="block block-mid light"></div></div>
+<div class="cell row-current"><div class="block block-mid video"><div class="hook">fade out</div></div></div>
+<div class="cell row-current"></div>
+<div class="cell row-current"><div class="block block-mid audio"><div class="hook">fade out</div></div></div>
+<!-- R9: Preshow ends -->
+<div class="cell"></div>
+<div class="cell"><div class="block block-end light"><div class="hook">end</div></div></div>
+<div class="cell"><div class="block block-mid light"></div></div>
+<div class="cell"><div class="block block-end video"><div class="hook">end</div></div></div>
+<div class="cell"></div>
+<div class="cell"><div class="block block-end audio"><div class="hook">end</div></div></div>
+<!-- R10: 3s delay start, Cool 50% title (R7-R13 mid=R10) -->
+<div class="cell"></div>
+<div class="cell"></div>
+<div class="cell"><div class="block block-mid light"><div class="title">Cool 50%</div></div></div>
+<div class="cell"><div class="block block-start delay"><div class="hook">start</div></div></div>
+<div class="cell"></div>
+<div class="cell"></div>
+<!-- R11: 3s delay title (R10-R12 mid=R11) -->
+<div class="cell"></div>
+<div class="cell"></div>
+<div class="cell"><div class="block block-mid light"></div></div>
+<div class="cell"><div class="block block-mid delay"><div class="title">3s Delay</div></div></div>
+<div class="cell"></div>
+<div class="cell"></div>
+<!-- R12: 3s delay end -->
+<div class="cell"></div>
+<div class="cell"></div>
+<div class="cell"><div class="block block-mid light"></div></div>
+<div class="cell"><div class="block block-end delay"><div class="hook">end</div></div></div>
+<div class="cell"></div>
+<div class="cell"></div>
+<!-- R13: SC1 Focus start, Cool 50% end, Sc1 Projection start, Storm Ambience start -->
+<div class="cell"></div>
+<div class="cell"><div class="block block-start light"><div class="hook">start</div></div></div>
+<div class="cell"><div class="block block-end light"><div class="hook">end</div></div></div>
+<div class="cell"><div class="block block-start video"><div class="hook">start</div></div></div>
+<div class="cell"></div>
+<div class="cell"><div class="block block-start audio"><div class="hook">start</div></div></div>
+<!-- R15: SC1 Blue start, Lightning Flash start, Storm fade in -->
+<div class="cell"></div>
+<div class="cell"><div class="block block-mid light"></div></div>
+<div class="cell"><div class="block block-start light"><div class="hook">start</div></div></div>
+<div class="cell"><div class="block block-mid video"></div></div>
+<div class="cell"><div class="block block-start overlay"><div class="hook">start</div></div></div>
+<div class="cell"><div class="block block-mid audio"><div class="hook">fade in</div></div></div>
+<!-- R16: Sc1 Projection title (R13-R19 mid=R16), Lightning Flash title (R15-R17 mid=R16) -->
+<div class="cell"></div>
+<div class="cell"><div class="block block-mid light"></div></div>
+<div class="cell"><div class="block block-mid light"></div></div>
+<div class="cell"><div class="block block-mid video"><div class="title">Sc1 Projection</div></div></div>
+<div class="cell"><div class="block block-mid overlay"><div class="title">Lightning Flash</div></div></div>
+<div class="cell"><div class="block block-mid audio"></div></div>
+<!-- R17: Lightning end, SC1 Focus title (R13-R21 mid=R17), Storm Ambience title (R13-R21 mid=R17) -->
+<div class="cell"></div>
+<div class="cell"><div class="block block-mid light"><div class="title">SC1 Focus</div></div></div>
+<div class="cell"><div class="block block-mid light"></div></div>
+<div class="cell"><div class="block block-mid video"></div></div>
+<div class="cell"><div class="block block-end overlay"><div class="hook">end</div></div></div>
+<div class="cell"><div class="block block-mid audio"><div class="title">Storm Ambience</div></div></div>
+<!-- R18: Projection fade out, Wave Overlay start, SC1 Blue title (R15-R22 mid=R18) -->
+<div class="cell"></div>
+<div class="cell"><div class="block block-mid light"></div></div>
+<div class="cell"><div class="block block-mid light"><div class="title">SC1 Blue 80%</div></div></div>
+<div class="cell"><div class="block block-mid video"><div class="hook">fade out</div></div></div>
+<div class="cell"><div class="block block-start overlay"><div class="hook">start</div></div></div>
+<div class="cell"><div class="block block-mid audio"></div></div>
+<!-- R19: Projection end -->
+<div class="cell"></div>
+<div class="cell"><div class="block block-mid light"></div></div>
+<div class="cell"><div class="block block-mid light"></div></div>
+<div class="cell"><div class="block block-end video"><div class="hook">end</div></div></div>
+<div class="cell"><div class="block block-mid overlay"></div></div>
+<div class="cell"><div class="block block-mid audio"></div></div>
+<!-- R20: Q13 GO, SC1 Focus fade out -->
+<div class="cell"><div class="block block-single cue"><div class="cue-label">Q13 Sc1 Dialog</div></div></div>
+<div class="cell"><div class="block block-mid light"><div class="hook">fade out</div></div></div>
+<div class="cell"><div class="block block-mid light"></div></div>
+<div class="cell"></div>
+<div class="cell"><div class="block block-mid overlay"></div></div>
+<div class="cell"><div class="block block-mid audio"><div class="hook">fade out</div></div></div>
+<!-- R21: SC1 Focus end, SC1 Blue fade out, Storm end -->
+<div class="cell"></div>
+<div class="cell"><div class="block block-end light"><div class="hook">end</div></div></div>
+<div class="cell"><div class="block block-mid light"><div class="hook">fade out</div></div></div>
+<div class="cell"></div>
+<div class="cell"><div class="block block-mid overlay"></div></div>
+<div class="cell"><div class="block block-end audio"><div class="hook">end</div></div></div>
+<!-- R22: Dialog Spots start, SC1 Blue end, Wave Overlay title (R18-R26 mid=R22), Dialog Underscore start -->
+<div class="cell"></div>
+<div class="cell"><div class="block block-start light"><div class="hook">start</div></div></div>
+<div class="cell"><div class="block block-end light"><div class="hook">end</div></div></div>
+<div class="cell"></div>
+<div class="cell"><div class="block block-mid overlay"><div class="title">Wave Overlay</div></div></div>
+<div class="cell"><div class="block block-start audio"><div class="hook">start</div></div></div>
+<!-- R23: Warm 90% start, Dialog Underscore title (R22-R25 mid=R23) -->
+<div class="cell"></div>
+<div class="cell"><div class="block block-mid light"></div></div>
+<div class="cell"><div class="block block-start light"><div class="hook">start</div></div></div>
+<div class="cell"></div>
+<div class="cell"><div class="block block-mid overlay"></div></div>
+<div class="cell"><div class="block block-mid audio"><div class="title">Dialog Underscore</div></div></div>
+<!-- R24: Dialog Spots title (R22-R26 mid=R24), Warm 90% title (R23-R26 mid=R24) -->
+<div class="cell"></div>
+<div class="cell"><div class="block block-mid light"><div class="title">Dialog Spots</div></div></div>
+<div class="cell"><div class="block block-mid light"><div class="title">Warm 90%</div></div></div>
+<div class="cell"></div>
+<div class="cell"><div class="block block-mid overlay"></div></div>
+<div class="cell"><div class="block block-mid audio"></div></div>
+<!-- R25: Q14 GO, Dialog Spots fade, Sc2 Background start, Wave fade, Dialog Underscore end -->
+<div class="cell"><div class="block block-single cue"><div class="cue-label">Q14 Sc2 Trans</div></div></div>
+<div class="cell"><div class="block block-mid light"><div class="hook">fade out</div></div></div>
+<div class="cell"><div class="block block-mid light"></div></div>
+<div class="cell"><div class="block block-start video"><div class="hook">start</div></div></div>
+<div class="cell"><div class="block block-mid overlay"><div class="hook">fade out</div></div></div>
+<div class="cell"><div class="block block-end audio"><div class="hook">end</div></div></div>
+<!-- R26: Dialog Spots end, Warm 90% end, Wave end -->
+<div class="cell"></div>
+<div class="cell"><div class="block block-end light"><div class="hook">end</div></div></div>
+<div class="cell"><div class="block block-end light"><div class="hook">end</div></div></div>
+<div class="cell"><div class="block block-mid video"></div></div>
+<div class="cell"><div class="block block-end overlay"><div class="hook">end</div></div></div>
+<div class="cell"></div>
+<!-- R27: SC2 Focus start, SC2 Amber start, Sc2 Background title (R25-R29 mid=R27), SC2 Atmos start -->
+<div class="cell"></div>
+<div class="cell"><div class="block block-start light"><div class="hook">start</div></div></div>
+<div class="cell"><div class="block block-start light"><div class="hook">start</div></div></div>
+<div class="cell"><div class="block block-mid video"><div class="title">Sc2 Background</div></div></div>
+<div class="cell"></div>
+<div class="cell"><div class="block block-start audio"><div class="hook">start</div></div></div>
+<!-- R28: titles: SC2 Focus (R27-R29 mid=R28), SC2 Amber (R27-R29 mid=R28), SC2 Atmos (R27-R29 mid=R28) -->
+<div class="cell"></div>
+<div class="cell"><div class="block block-mid light"><div class="title">SC2 Focus</div></div></div>
+<div class="cell"><div class="block block-mid light"><div class="title">SC2 Amber 60%</div></div></div>
+<div class="cell"><div class="block block-mid video"></div></div>
+<div class="cell"></div>
+<div class="cell"><div class="block block-mid audio"><div class="title">SC2 Atmos</div></div></div>
+<!-- R29: infinity -->
+<div class="cell"></div>
+<div class="cell infinity-cell"><div class="block block-mid light"></div><div class="infinity-marker">&#x223F;&#x223F;&#x223F;</div></div>
+<div class="cell infinity-cell"><div class="block block-mid light"></div><div class="infinity-marker">&#x223F;&#x223F;&#x223F;</div></div>
+<div class="cell infinity-cell"><div class="block block-mid video"></div><div class="infinity-marker">&#x223F;&#x223F;&#x223F;</div></div>
+<div class="cell"></div>
+<div class="cell infinity-cell"><div class="block block-mid audio"></div><div class="infinity-marker">&#x223F;&#x223F;&#x223F;</div></div>
+
+</div>
+</div>
+</div>
+</body>
+</html>

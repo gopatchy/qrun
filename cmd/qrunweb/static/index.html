@@ -160,401 +160,261 @@ header h1 { font-size: 16px; font-weight: 600; letter-spacing: 0.05em; }
 fetch('show.json').then(r => r.json()).then(render);
 
 function render(data) {
-  const blockMap = new Map(data.blocks.map(b => [b.id, b]));
-  const CUE_TRACK = '_cue';
-  const trackIds = [CUE_TRACK, ...data.tracks.map(t => t.id)];
+  const blocks = new Map(data.blocks.map(b => [b.id, b]));
+  const getTrack = id => blocks.get(id).type === 'cue' ? '_cue' : blocks.get(id).track;
+  const trackIds = ['_cue', ...data.tracks.map(t => t.id)];
+  
+  const startSigs = new Map();
+  data.triggers.forEach(t => t.source.signal === 'START' && startSigs.set(t.source.block, t.targets));
 
-  function ref(b, s) { return b + ':' + s; }
+  const isChain = t => {
+    if (t.source.signal !== 'END' || t.targets.length !== 1) return false;
+    return t.targets[0].hook === 'START' && getTrack(t.source.block) === getTrack(t.targets[0].block);
+  };
+  
+  const expand = (tgts) => {
+    const res = new Map();
+    const q = [...tgts];
+    while(q.length) {
+      const {block, hook} = q.shift();
+      if (!res.has(block)) { res.set(block, hook); if (hook === 'START' && startSigs.has(block)) q.push(...startSigs.get(block)); }
+    }
+    return res;
+  };
 
-  const triggerSourceSet = new Set();
-  const startSignalMap = new Map();
-  data.triggers.forEach(t => {
-    triggerSourceSet.add(ref(t.source.block, t.source.signal));
-    if (t.source.signal === 'START') startSignalMap.set(t.source.block, t.targets);
-  });
+  let active = new Map(), pending = new Set(), rows = [], noTitle = new Set();
 
-  function blockTrack(bid) {
-    const b = blockMap.get(bid);
-    return b.type === 'cue' ? CUE_TRACK : b.track;
-  }
-
-  function isChain(trigger) {
-    const src = trigger.source;
-    if (src.signal !== 'END' || trigger.targets.length !== 1) return false;
-    return trigger.targets[0].hook === 'START' &&
-      blockTrack(src.block) === blockTrack(trigger.targets[0].block);
-  }
-
-  document.getElementById('header-status').innerHTML =
-    '<span><span class="status-dot"></span>QLab Connected</span>' +
-    '<span>Show: ' + data.show + '</span>' +
-    '<span>Cue: ' + data.blocks.filter(b => b.type === 'cue').length + '</span>';
-
-  const active = new Map();
-  const pendingEnds = new Set();
-  const noTitleAfter = new Set();
-  const rows = [];
-
-  function mid(tid) {
-    const a = active.get(tid);
-    return a ? { blockId: a, segment: 'mid' } : { empty: true };
-  }
-
-  function addRow(cells, rowClass) {
-    rowClass = rowClass || '';
-    if (rows.length > 0) {
-      const last = rows[rows.length - 1];
-      if (last.rowClass === rowClass) {
-        let canMerge = true;
-        for (let i = 0; i < cells.length; i++) {
-          if ((cells[i].event || cells[i].cueLabel) && (last.cells[i].event || last.cells[i].cueLabel)) {
-            canMerge = false;
-            break;
-          }
-        }
-        if (canMerge) {
-          for (let i = 0; i < cells.length; i++) {
-            if (cells[i].event || cells[i].cueLabel) last.cells[i] = cells[i];
-          }
-          return;
-        }
+  const addRow = (cells, cls = '') => {
+    const last = rows[rows.length-1];
+    if (last && last.rowClass === cls) {
+      let merge = true;
+      for (let i=0; i<cells.length; i++) {
+        if ((cells[i].event||cells[i].cueLabel) && (last.cells[i].event||last.cells[i].cueLabel)) { merge = false; break; }
+      }
+      if (merge) {
+        cells.forEach((c, i) => { if (c.event||c.cueLabel) last.cells[i] = c; });
+        return;
       }
     }
-    rows.push({ cells, rowClass });
-  }
+    rows.push({ cells, rowClass: cls });
+  };
 
-  function flush() {
-    if (pendingEnds.size === 0) return;
+  const mid = tid => active.has(tid) ? { blockId: active.get(tid), segment: 'mid' } : { empty: true };
+  const mkCells = evs => trackIds.map(tid => evs.get(tid) || mid(tid));
 
-    const toEnd = [...pendingEnds].filter(bid => !triggerSourceSet.has(ref(bid, 'END')));
-    if (toEnd.length === 0) return;
+  const flush = () => {
+    const toEnd = [...pending].filter(bid => !data.triggers.some(t => t.source.block === bid && t.source.signal === 'END'));
+    if (!toEnd.length) return;
+    const evs = new Map();
+    toEnd.forEach(bid => evs.set(getTrack(bid), { blockId: bid, segment: 'end', event: 'END' }));
+    addRow(mkCells(evs));
+    toEnd.forEach(bid => { active.delete(getTrack(bid)); pending.delete(bid); });
+  };
 
-    const cells = trackIds.map(tid => {
-      const e = toEnd.find(bid => blockTrack(bid) === tid);
-      return e ? { blockId: e, segment: 'end', event: 'END' } : mid(tid);
-    });
-    addRow(cells);
-    toEnd.forEach(bid => { active.delete(blockTrack(bid)); pendingEnds.delete(bid); });
-  }
-
-  function expandTargets(targetMap) {
-    const toExpand = [...targetMap.entries()].filter(([_, hook]) => hook === 'START');
-    toExpand.forEach(([bid]) => {
-      const extras = startSignalMap.get(bid);
-      if (extras) extras.forEach(et => { if (!targetMap.has(et.block)) targetMap.set(et.block, et.hook); });
-    });
-  }
-
-  function applyTargets(targetMap, tid, isCue) {
-    const entry = [...targetMap.entries()].find(([bid]) => blockTrack(bid) === tid);
-    if (!entry) return null;
-    const [bid, hook] = entry;
-    const isHook = !isCue;
-    if (hook === 'START') {
-      active.set(tid, bid);
-      return { blockId: bid, segment: 'start', event: 'START', isHook };
-    }
-    if (hook === 'END') return { blockId: bid, segment: 'end', event: 'END', isHook, directEnd: true };
-    if (hook === 'FADE_OUT') {
-      pendingEnds.add(bid);
-      return { blockId: bid, segment: 'mid', event: 'FADE_OUT' };
-    }
-    return null;
-  }
-
-  function processChainBatch(chains) {
-    flush();
-    const chainEnds = [];
-    for (const trigger of chains) {
-      const src = trigger.source.block;
-      const tid = blockTrack(src);
-      if (active.get(tid) === src || pendingEnds.has(src)) {
-        pendingEnds.delete(src);
-        chainEnds.push({ block: src, track: tid });
-        active.delete(tid);
-      }
-    }
-    if (chainEnds.length > 0) {
-      const endCells = trackIds.map(t => {
-        const e = chainEnds.find(ce => ce.track === t);
-        return e ? { blockId: e.block, segment: 'end', event: 'END' } : mid(t);
-      });
-      addRow(endCells);
-    }
-    const chainStarts = new Map();
-    const combinedTargets = new Map();
-    for (const trigger of chains) {
-      const tgt = trigger.targets[0].block;
-      const tid = blockTrack(tgt);
-      active.set(tid, tgt);
-      const targetMap = new Map();
-      const extras = startSignalMap.get(tgt);
-      if (extras) extras.forEach(et => targetMap.set(et.block, et.hook));
-      expandTargets(targetMap);
-      chainStarts.set(tid, { blockId: tgt, hasTargets: targetMap.size > 0 });
-      for (const [bid, hook] of targetMap) {
-        if (!combinedTargets.has(bid)) combinedTargets.set(bid, hook);
-      }
-    }
-    const hasAnyTargets = [...chainStarts.values()].some(cs => cs.hasTargets);
-    noTitleAfter.add(rows.length - 1);
-    const directEnds = [];
-    const startCells = trackIds.map(t => {
-      const cs = chainStarts.get(t);
-      if (cs) return { blockId: cs.blockId, segment: 'start', event: 'START', isSignal: cs.hasTargets };
-      const cell = applyTargets(combinedTargets, t, false);
-      if (cell) { if (cell.directEnd) { directEnds.push(cell.blockId); delete cell.directEnd; } return cell; }
-      return mid(t);
-    });
-    addRow(startCells, hasAnyTargets ? 'sig-row' : '');
-    directEnds.forEach(bid => active.delete(blockTrack(bid)));
-  }
-
-  function processTrigger(trigger) {
-    const src = trigger.source;
-    const isCue = src.signal === 'GO';
-
-    flush();
-
-    const rowClass = isCue ? 'cue-row' : 'sig-row';
-
-    const targetMap = new Map();
-    trigger.targets.forEach(t => targetMap.set(t.block, t.hook));
-    expandTargets(targetMap);
-
-    const directEnds = [];
-
-    const cells = trackIds.map(tid => {
-      if (isCue && tid === CUE_TRACK)
-        return { cueLabel: blockMap.get(src.block).name };
-
-      if (!isCue && blockTrack(src.block) === tid) {
-        const seg = src.signal === 'END' ? 'end' : 'mid';
-        return { blockId: src.block, segment: seg, event: src.signal, isSignal: true };
-      }
-
-      const cell = applyTargets(targetMap, tid, isCue);
-      if (cell) { if (cell.directEnd) { directEnds.push(cell.blockId); delete cell.directEnd; } return cell; }
-
-      return mid(tid);
-    });
-
-    addRow(cells, rowClass);
-
-    directEnds.forEach(bid => active.delete(blockTrack(bid)));
-
-    if (!isCue) {
-      if (src.signal === 'FADE_OUT') pendingEnds.add(src.block);
-      if (src.signal === 'END') {
-        active.delete(blockTrack(src.block));
-        pendingEnds.delete(src.block);
-      }
-    }
-  }
-
-  let triggerIdx = 0;
-  while (triggerIdx < data.triggers.length) {
-    const t = data.triggers[triggerIdx];
-    if (t.source.signal === 'START') { triggerIdx++; continue; }
+  for (let i = 0; i < data.triggers.length; i++) {
+    const t = data.triggers[i];
+    if (t.source.signal === 'START') continue;
+    
     if (isChain(t)) {
-      if (startSignalMap.has(t.targets[0].block)) {
-        processChainBatch([t]);
-        triggerIdx++;
+      if (startSigs.has(t.targets[0].block)) {
+        flush();
+        const s = t.source.block, tgt = t.targets[0].block, tid = getTrack(tgt);
+        
+        const ends = new Map();
+        if (active.get(tid) === s || pending.has(s)) {
+          pending.delete(s); active.delete(tid);
+          ends.set(tid, { blockId: s, segment: 'end', event: 'END' });
+        }
+        if (ends.size) addRow(mkCells(ends));
+
+        active.set(tid, tgt);
+        const sideEffects = new Map(), starts = new Map();
+        expand(startSigs.get(tgt)).forEach((h, b) => sideEffects.set(b, h));
+        starts.set(tid, { blockId: tgt, segment: 'start', event: 'START', isSignal: true });
+        
+        noTitle.add(rows.length-1);
+        sideEffects.forEach((h, b) => {
+          const ttid = getTrack(b);
+          if (starts.has(ttid)) return;
+          if (h === 'START') { active.set(ttid, b); starts.set(ttid, { blockId: b, segment: 'start', event: 'START', isHook: true }); }
+          else if (h === 'END') { starts.set(ttid, { blockId: b, segment: 'end', event: 'END', isHook: true }); active.delete(ttid); }
+          else if (h === 'FADE_OUT') { starts.set(ttid, { blockId: b, segment: 'mid', event: 'FADE_OUT' }); pending.add(b); }
+        });
+        addRow(mkCells(starts), sideEffects.size ? 'sig-row' : '');
         continue;
       }
-      const batch = [t];
-      const batchTracks = new Set([blockTrack(t.source.block)]);
-      let j = triggerIdx + 1;
+      
+      let batch = [t], tracks = new Set([getTrack(t.source.block)]), j = i + 1;
       while (j < data.triggers.length) {
-        if (data.triggers[j].source.signal === 'START') { j++; continue; }
-        if (!isChain(data.triggers[j])) break;
-        if (batchTracks.has(blockTrack(data.triggers[j].source.block))) break;
-        if (startSignalMap.has(data.triggers[j].targets[0].block)) break;
-        batchTracks.add(blockTrack(data.triggers[j].source.block));
-        batch.push(data.triggers[j]);
-        j++;
+        const c = data.triggers[j];
+        if (c.source.signal === 'START') { j++; continue; }
+        if (!isChain(c) || tracks.has(getTrack(c.source.block)) || startSigs.has(c.targets[0].block)) break;
+        tracks.add(getTrack(c.source.block)); batch.push(c); j++;
       }
-      processChainBatch(batch);
-      triggerIdx = j;
+      
+      flush();
+      const ends = new Map();
+      batch.forEach(c => {
+        const s = c.source.block, tid = getTrack(s);
+        if (active.get(tid) === s || pending.has(s)) {
+          pending.delete(s); active.delete(tid);
+          ends.set(tid, { blockId: s, segment: 'end', event: 'END' });
+        }
+      });
+      if (ends.size) addRow(mkCells(ends));
+      
+      const starts = new Map(), sideEffects = new Map();
+      batch.forEach(c => {
+        const tgt = c.targets[0].block, tid = getTrack(tgt);
+        active.set(tid, tgt);
+        const hasSigs = startSigs.has(tgt);
+        if (hasSigs) expand(startSigs.get(tgt)).forEach((h, b) => sideEffects.set(b, h));
+        starts.set(tid, { blockId: tgt, segment: 'start', event: 'START', isSignal: hasSigs });
+      });
+      noTitle.add(rows.length-1);
+
+      sideEffects.forEach((h, b) => {
+          const tid = getTrack(b);
+          if (starts.has(tid)) return;
+          if (h === 'START') { active.set(tid, b); starts.set(tid, { blockId: b, segment: 'start', event: 'START', isHook: true }); }
+          else if (h === 'END') { starts.set(tid, { blockId: b, segment: 'end', event: 'END', isHook: true }); active.delete(tid); }
+          else if (h === 'FADE_OUT') { starts.set(tid, { blockId: b, segment: 'mid', event: 'FADE_OUT' }); pending.add(b); }
+      });
+
+      addRow(mkCells(starts), sideEffects.size ? 'sig-row' : '');
+      i = j - 1;
       continue;
     }
-    processTrigger(t);
-    triggerIdx++;
+    
+    flush();
+    const isCue = t.source.signal === 'GO';
+    const tgts = new Map();
+    t.targets.forEach(tx => tgts.set(tx.block, tx.hook));
+    expand(t.targets).forEach((h, b) => tgts.set(b, h));
+    
+    const evs = new Map(), directEnds = [];
+    if (isCue) evs.set('_cue', { cueLabel: blocks.get(t.source.block).name });
+    else if (getTrack(t.source.block) !== '_cue') evs.set(getTrack(t.source.block), { blockId: t.source.block, segment: t.source.signal === 'END' ? 'end' : 'mid', event: t.source.signal, isSignal: true });
+
+    tgts.forEach((h, b) => {
+      const tid = getTrack(b);
+      if (evs.has(tid)) return;
+      if (h === 'START') { active.set(tid, b); evs.set(tid, { blockId: b, segment: 'start', event: 'START', isHook: !isCue }); }
+      else if (h === 'END') { evs.set(tid, { blockId: b, segment: 'end', event: 'END', isHook: !isCue, directEnd: true }); }
+      else if (h === 'FADE_OUT') { evs.set(tid, { blockId: b, segment: 'mid', event: 'FADE_OUT' }); pending.add(b); }
+    });
+    
+    const cells = mkCells(evs);
+    evs.forEach((c, tid) => { if(c.directEnd) { directEnds.push(c.blockId); delete c.directEnd; } });
+    addRow(cells, isCue ? 'cue-row' : 'sig-row');
+    directEnds.forEach(b => active.delete(getTrack(b)));
+    
+    if (!isCue) {
+      if (t.source.signal === 'FADE_OUT') pending.add(t.source.block);
+      if (t.source.signal === 'END') { active.delete(getTrack(t.source.block)); pending.delete(t.source.block); }
+    }
   }
   flush();
 
-  const stillActive = [];
-  for (const [tid, bid] of active) {
-    if (tid !== CUE_TRACK) stillActive.push(bid);
-  }
-  if (stillActive.length > 0) {
-    const cells = trackIds.map(tid => {
-      const bid = stillActive.find(b => blockTrack(b) === tid);
-      return bid ? { blockId: bid, segment: 'mid', infinity: true } : mid(tid);
-    });
-    addRow(cells);
-  }
+  const activeEvs = new Map();
+  [...active].forEach(([tid, bid]) => { if (tid !== '_cue') activeEvs.set(tid, { blockId: bid, segment: 'mid', infinity: true }); });
+  if (activeEvs.size) addRow(mkCells(activeEvs));
 
-  const blockOpenEnd = new Map();
-  const blockCloseStart = new Map();
-  const blockRange = new Map();
-  rows.forEach((row, idx) => {
-    row.cells.forEach(cell => {
-      if (!cell.blockId) return;
-      const bid = cell.blockId;
-      if (!blockRange.has(bid)) blockRange.set(bid, { first: idx, last: idx });
-      else blockRange.get(bid).last = idx;
-      if (cell.event === 'START') blockOpenEnd.set(bid, Math.max(blockOpenEnd.get(bid) || -1, idx));
-      if (cell.event === 'FADE_OUT' || cell.event === 'END') blockCloseStart.set(bid, Math.min(blockCloseStart.get(bid) || Infinity, idx));
-    });
-  });
+  const ranges = new Map();
+  rows.forEach((row, rIdx) => row.cells.forEach(c => {
+    if (!c.blockId) return;
+    const r = ranges.get(c.blockId) || { first: rIdx, last: rIdx, start: -1, end: Infinity };
+    r.last = rIdx;
+    if (c.event === 'START') r.start = Math.max(r.start, rIdx);
+    if (['END', 'FADE_OUT'].includes(c.event)) r.end = Math.min(r.end, rIdx);
+    ranges.set(c.blockId, r);
+  }));
 
-  const titlesToPlace = [];
-  for (const [bid, range] of blockRange) {
-    if (blockMap.get(bid).type === 'cue') continue;
-    const openEnd = blockOpenEnd.get(bid) || range.first;
-    const closeStart = blockCloseStart.has(bid) ? blockCloseStart.get(bid) : Infinity;
-    let afterRow;
-    if (closeStart === Infinity) {
-      afterRow = openEnd;
-    } else if (openEnd + 1 <= closeStart - 1) {
-      afterRow = Math.floor((openEnd + closeStart - 1) / 2);
-    } else {
-      afterRow = openEnd;
-    }
-    titlesToPlace.push({ bid, track: blockTrack(bid), afterRow, validFrom: openEnd, validTo: closeStart === Infinity ? range.last : closeStart - 1 });
-  }
-  titlesToPlace.sort((a, b) => a.afterRow - b.afterRow);
+  const titles = [...ranges.entries()].filter(([bid]) => blocks.get(bid).type !== 'cue').map(([bid, r]) => {
+    const s = r.start >= 0 ? r.start : r.first, e = r.end !== Infinity ? r.end : r.last;
+    return { bid, track: getTrack(bid), s, e: r.end !== Infinity ? r.end - 1 : e, pos: Math.floor((s + (r.end !== Infinity ? r.end - 1 : e)) / 2) };
+  }).sort((a,b) => a.pos - b.pos);
 
-  const titleGroups = [];
-  titlesToPlace.forEach(t => {
-    let best = -1;
-    let bestDist = Infinity;
-    for (let i = 0; i < titleGroups.length; i++) {
-      const group = titleGroups[i];
-      const iFrom = Math.max(group.validFrom, t.validFrom);
-      const iTo = Math.min(group.validTo, t.validTo);
-      if (iFrom > iTo) continue;
-      if (group.titles.some(gt => gt.track === t.track)) continue;
-      let candidate = group.afterRow;
-      if (candidate < iFrom || candidate > iTo) candidate = Math.floor((iFrom + iTo) / 2);
-      if (noTitleAfter.has(candidate)) {
-        let found = false;
-        for (let r = candidate + 1; r <= iTo; r++) {
-          if (!noTitleAfter.has(r)) { candidate = r; found = true; break; }
-        }
-        if (!found) continue;
+  const groups = [];
+  titles.forEach(t => {
+    let best = -1, bestDist = Infinity;
+    for (let i = 0; i < groups.length; i++) {
+      const g = groups[i];
+      const iS = Math.max(g.s, t.s), iE = Math.min(g.e, t.e);
+      if (iS > iE || g.titles.some(gt => gt.track === t.track)) continue;
+      let cand = g.pos; if (cand < iS || cand > iE) cand = Math.floor((iS + iE) / 2);
+      if (noTitle.has(cand)) {
+        let f = false; for (let r = cand + 1; r <= iE; r++) { if (!noTitle.has(r)) { cand = r; f = true; break; } }
+        if (!f) continue;
       }
-      const dist = Math.abs(candidate - t.afterRow);
+      const dist = Math.abs(cand - t.pos);
       if (dist < bestDist) { best = i; bestDist = dist; }
     }
     if (best >= 0) {
-      const group = titleGroups[best];
-      group.validFrom = Math.max(group.validFrom, t.validFrom);
-      group.validTo = Math.min(group.validTo, t.validTo);
-      if (group.afterRow < group.validFrom || group.afterRow > group.validTo) {
-        group.afterRow = Math.floor((group.validFrom + group.validTo) / 2);
-      }
-      if (noTitleAfter.has(group.afterRow)) {
-        for (let r = group.afterRow + 1; r <= group.validTo; r++) {
-          if (!noTitleAfter.has(r)) { group.afterRow = r; break; }
-        }
-      }
-      group.titles.push({ bid: t.bid, track: t.track });
+      const g = groups[best];
+      g.s = Math.max(g.s, t.s); g.e = Math.min(g.e, t.e);
+      if (g.pos < g.s || g.pos > g.e) g.pos = Math.floor((g.s + g.e) / 2);
+      if (noTitle.has(g.pos)) { for (let r = g.pos + 1; r <= g.e; r++) if (!noTitle.has(r)) { g.pos = r; break; } }
+      g.titles.push(t);
     } else {
-      let pos = t.afterRow;
-      if (noTitleAfter.has(pos)) {
-        for (let r = pos + 1; r <= t.validTo; r++) {
-          if (!noTitleAfter.has(r)) { pos = r; break; }
-        }
-      }
-      titleGroups.push({ afterRow: pos, validFrom: t.validFrom, validTo: t.validTo, titles: [{ bid: t.bid, track: t.track }] });
+      let p = t.pos; if (noTitle.has(p)) { for (let r = p + 1; r <= t.e; r++) if (!noTitle.has(r)) { p = r; break; } }
+      groups.push({ pos: p, s: t.s, e: t.e, titles: [t] });
     }
   });
-  titleGroups.sort((a, b) => a.afterRow - b.afterRow);
+  groups.sort((a,b) => a.pos - b.pos);
 
   const finalRows = [];
-  let tgIdx = 0;
-  rows.forEach((row, idx) => {
-    finalRows.push(row);
-    while (tgIdx < titleGroups.length && titleGroups[tgIdx].afterRow === idx) {
-      const group = titleGroups[tgIdx];
-      const titleCells = trackIds.map((tid, colIdx) => {
-        const t = group.titles.find(gt => gt.track === tid);
-        if (t) return { blockId: t.bid, segment: 'mid', title: blockMap.get(t.bid).name };
-        const prev = row.cells[colIdx];
-        if (prev.blockId && prev.segment !== 'end') return { blockId: prev.blockId, segment: 'mid' };
-        return { empty: true };
-      });
-      finalRows.push({ cells: titleCells, rowClass: '' });
-      tgIdx++;
+  let gIdx = 0;
+  rows.forEach((r, i) => {
+    finalRows.push(r);
+    while (gIdx < groups.length && groups[gIdx].pos === i) {
+      const g = groups[gIdx];
+      finalRows.push({ cells: trackIds.map((tid, col) => {
+        const t = g.titles.find(gt => gt.track === tid);
+        if (t) return { blockId: t.bid, segment: 'mid', title: blocks.get(t.bid).name };
+        const p = r.cells[col];
+        return p.blockId && p.segment !== 'end' ? { blockId: p.blockId, segment: 'mid' } : { empty: true };
+      }) });
+      gIdx++;
     }
   });
 
+  document.getElementById('header-status').innerHTML =
+    `<span><span class="status-dot"></span>QLab Connected</span>` +
+    `<span>Show: ${data.show}</span>` +
+    `<span>Cue: ${data.blocks.filter(b => b.type === 'cue').length}</span>`;
+
   const timeline = document.getElementById('timeline');
-  const trackNames = { [CUE_TRACK]: 'Cue' };
-  data.tracks.forEach(t => { trackNames[t.id] = t.name; });
-  timeline.style.gridTemplateColumns = 'repeat(' + trackIds.length + ', 140px)';
-
+  timeline.style.gridTemplateColumns = `repeat(${trackIds.length}, 140px)`;
   trackIds.forEach(tid => {
-    const th = document.createElement('div');
-    th.className = 'track-header';
-    th.textContent = trackNames[tid];
-    timeline.appendChild(th);
+    const el = document.createElement('div');
+    el.className = 'track-header';
+    el.textContent = tid === '_cue' ? 'Cue' : (data.tracks.find(t => t.id === tid)||{}).name;
+    timeline.appendChild(el);
   });
 
-  finalRows.forEach(row => {
-    row.cells.forEach(cell => {
-      const div = document.createElement('div');
-      let cls = 'cell';
-      if (row.rowClass) cls += ' ' + row.rowClass;
-
-      if (cell.cueLabel) {
-        div.className = cls;
-        const label = document.createElement('div');
-        label.className = 'cue-label';
-        label.textContent = cell.cueLabel;
-        div.appendChild(label);
-      } else if (cell.empty) {
-        div.className = cls;
-      } else if (cell.title) {
-        div.className = cls;
-        const block = document.createElement('div');
-        block.className = 'block block-mid ' + blockMap.get(cell.blockId).type;
-        const t = document.createElement('div');
-        t.className = 'title';
-        t.textContent = cell.title;
-        block.appendChild(t);
-        div.appendChild(block);
-      } else if (cell.infinity) {
-        div.className = cls + ' infinity-cell';
-        const block = document.createElement('div');
-        block.className = 'block block-mid ' + blockMap.get(cell.blockId).type;
-        div.appendChild(block);
-        const marker = document.createElement('div');
-        marker.className = 'infinity-marker';
-        marker.innerHTML = '&#x223F;&#x223F;&#x223F;';
-        div.appendChild(marker);
-      } else {
-        div.className = cls;
-        const seg = cell.segment || 'mid';
-        const block = document.createElement('div');
-        block.className = 'block block-' + seg + ' ' + blockMap.get(cell.blockId).type;
-        if (cell.event) {
-          const hook = document.createElement('div');
-          let hookCls = 'hook';
-          if (cell.isSignal) hookCls += ' sig';
-          else if (cell.isHook) hookCls += ' hk';
-          hook.className = hookCls;
-          hook.textContent = cell.event.replace('_', ' ');
-          block.appendChild(hook);
-        }
-        div.appendChild(block);
+  finalRows.forEach(row => row.cells.forEach(c => {
+    const div = document.createElement('div');
+    div.className = 'cell ' + (row.rowClass || '');
+    if (c.cueLabel) {
+      div.innerHTML = `<div class="cue-label">${c.cueLabel}</div>`;
+    } else if (c.title) {
+      div.innerHTML = `<div class="block block-mid ${blocks.get(c.blockId).type}"><div class="title">${c.title}</div></div>`;
+    } else if (c.blockId) {
+      const b = blocks.get(c.blockId);
+      const seg = c.infinity ? 'mid' : (c.segment || 'mid');
+      div.className += c.infinity ? ' infinity-cell' : '';
+      let inner = `<div class="block block-${seg} ${b.type}">`;
+      if (c.event) {
+        let hCls = 'hook' + (c.isSignal ? ' sig' : (c.isHook ? ' hk' : ''));
+        inner += `<div class="${hCls}">${c.event.replace('_', ' ')}</div>`;
       }
-
-      timeline.appendChild(div);
-    });
-  });
+      inner += `</div>`;
+      if (c.infinity) inner += `<div class="infinity-marker">&#x223F;&#x223F;&#x223F;</div>`;
+      div.innerHTML = inner;
+    }
+    timeline.appendChild(div);
+  }));
 }
 </script>
 </body>

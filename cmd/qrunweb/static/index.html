@@ -192,8 +192,7 @@ function render(data) {
 
   const active = new Map();
   const pendingEnds = new Set();
-  const pendingTitles = new Set();
-  const titled = new Set();
+  const noTitleAfter = new Set();
   const rows = [];
 
   function mid(tid) {
@@ -205,23 +204,7 @@ function render(data) {
     rows.push({ cells, rowClass: rowClass || '' });
   }
 
-  function wantTitle(bid) {
-    if (!titled.has(bid)) pendingTitles.add(bid);
-  }
-
-  function emitTitles() {
-    if (pendingTitles.size === 0) return;
-    const cells = trackIds.map(tid => {
-      const t = [...pendingTitles].find(bid => blockTrack(bid) === tid);
-      return t ? { blockId: t, segment: 'mid', title: blockMap.get(t).name } : mid(tid);
-    });
-    addRow(cells);
-    pendingTitles.forEach(bid => titled.add(bid));
-    pendingTitles.clear();
-  }
-
   function flush() {
-    emitTitles();
     if (pendingEnds.size === 0) return;
 
     const toEnd = [...pendingEnds].filter(bid => !triggerSourceSet.has(ref(bid, 'END')));
@@ -250,7 +233,6 @@ function render(data) {
     const isHook = !isCue;
     if (hook === 'START') {
       active.set(tid, bid);
-      wantTitle(bid);
       return { blockId: bid, segment: 'start', event: 'START', isHook };
     }
     if (hook === 'END') return { blockId: bid, segment: 'end', event: 'END', isHook, directEnd: true };
@@ -280,13 +262,13 @@ function render(data) {
         active.delete(tid);
       }
       active.set(tid, tgt);
-      wantTitle(tgt);
       const targetMap = new Map();
       const extras = startSignalMap.get(tgt);
       if (extras) extras.forEach(et => targetMap.set(et.block, et.hook));
       expandTargets(targetMap);
       const hasTargets = targetMap.size > 0;
       const directEnds = [];
+      noTitleAfter.add(rows.length - 1);
       const startCells = trackIds.map(t => {
         if (t === tid) return { blockId: tgt, segment: 'start', event: 'START', isSignal: hasTargets };
         const cell = applyTargets(targetMap, t, false);
@@ -299,7 +281,6 @@ function render(data) {
     }
 
     flush();
-    emitTitles();
 
     const rowClass = isCue ? 'cue-row' : 'sig-row';
 
@@ -339,7 +320,6 @@ function render(data) {
 
   data.triggers.forEach(t => processTrigger(t));
   flush();
-  emitTitles();
 
   const stillActive = [];
   for (const [tid, bid] of active) {
@@ -353,6 +333,102 @@ function render(data) {
     addRow(cells);
   }
 
+  const blockOpenEnd = new Map();
+  const blockCloseStart = new Map();
+  const blockRange = new Map();
+  rows.forEach((row, idx) => {
+    row.cells.forEach(cell => {
+      if (!cell.blockId) return;
+      const bid = cell.blockId;
+      if (!blockRange.has(bid)) blockRange.set(bid, { first: idx, last: idx });
+      else blockRange.get(bid).last = idx;
+      if (cell.event === 'START') blockOpenEnd.set(bid, Math.max(blockOpenEnd.get(bid) || -1, idx));
+      if (cell.event === 'FADE_OUT' || cell.event === 'END') blockCloseStart.set(bid, Math.min(blockCloseStart.get(bid) || Infinity, idx));
+    });
+  });
+
+  const titlesToPlace = [];
+  for (const [bid, range] of blockRange) {
+    if (blockMap.get(bid).type === 'cue') continue;
+    const openEnd = blockOpenEnd.get(bid) || range.first;
+    const closeStart = blockCloseStart.has(bid) ? blockCloseStart.get(bid) : Infinity;
+    let afterRow;
+    if (closeStart === Infinity) {
+      afterRow = openEnd;
+    } else if (openEnd + 1 <= closeStart - 1) {
+      afterRow = Math.floor((openEnd + closeStart - 1) / 2);
+    } else {
+      afterRow = openEnd;
+    }
+    titlesToPlace.push({ bid, track: blockTrack(bid), afterRow, validFrom: openEnd, validTo: closeStart === Infinity ? range.last : closeStart - 1 });
+  }
+  titlesToPlace.sort((a, b) => a.afterRow - b.afterRow);
+
+  const titleGroups = [];
+  titlesToPlace.forEach(t => {
+    let best = -1;
+    let bestDist = Infinity;
+    for (let i = 0; i < titleGroups.length; i++) {
+      const group = titleGroups[i];
+      const iFrom = Math.max(group.validFrom, t.validFrom);
+      const iTo = Math.min(group.validTo, t.validTo);
+      if (iFrom > iTo) continue;
+      if (group.titles.some(gt => gt.track === t.track)) continue;
+      let candidate = group.afterRow;
+      if (candidate < iFrom || candidate > iTo) candidate = Math.floor((iFrom + iTo) / 2);
+      if (noTitleAfter.has(candidate)) {
+        let found = false;
+        for (let r = candidate + 1; r <= iTo; r++) {
+          if (!noTitleAfter.has(r)) { candidate = r; found = true; break; }
+        }
+        if (!found) continue;
+      }
+      const dist = Math.abs(candidate - t.afterRow);
+      if (dist < bestDist) { best = i; bestDist = dist; }
+    }
+    if (best >= 0) {
+      const group = titleGroups[best];
+      group.validFrom = Math.max(group.validFrom, t.validFrom);
+      group.validTo = Math.min(group.validTo, t.validTo);
+      if (group.afterRow < group.validFrom || group.afterRow > group.validTo) {
+        group.afterRow = Math.floor((group.validFrom + group.validTo) / 2);
+      }
+      if (noTitleAfter.has(group.afterRow)) {
+        for (let r = group.afterRow + 1; r <= group.validTo; r++) {
+          if (!noTitleAfter.has(r)) { group.afterRow = r; break; }
+        }
+      }
+      group.titles.push({ bid: t.bid, track: t.track });
+    } else {
+      let pos = t.afterRow;
+      if (noTitleAfter.has(pos)) {
+        for (let r = pos + 1; r <= t.validTo; r++) {
+          if (!noTitleAfter.has(r)) { pos = r; break; }
+        }
+      }
+      titleGroups.push({ afterRow: pos, validFrom: t.validFrom, validTo: t.validTo, titles: [{ bid: t.bid, track: t.track }] });
+    }
+  });
+  titleGroups.sort((a, b) => a.afterRow - b.afterRow);
+
+  const finalRows = [];
+  let tgIdx = 0;
+  rows.forEach((row, idx) => {
+    finalRows.push(row);
+    while (tgIdx < titleGroups.length && titleGroups[tgIdx].afterRow === idx) {
+      const group = titleGroups[tgIdx];
+      const titleCells = trackIds.map((tid, colIdx) => {
+        const t = group.titles.find(gt => gt.track === tid);
+        if (t) return { blockId: t.bid, segment: 'mid', title: blockMap.get(t.bid).name };
+        const prev = row.cells[colIdx];
+        if (prev.blockId && prev.segment !== 'end') return { blockId: prev.blockId, segment: 'mid' };
+        return { empty: true };
+      });
+      finalRows.push({ cells: titleCells, rowClass: '' });
+      tgIdx++;
+    }
+  });
+
   const timeline = document.getElementById('timeline');
   const trackNames = { [CUE_TRACK]: 'Cue' };
   data.tracks.forEach(t => { trackNames[t.id] = t.name; });
@@ -365,7 +441,7 @@ function render(data) {
     timeline.appendChild(th);
   });
 
-  rows.forEach(row => {
+  finalRows.forEach(row => {
     row.cells.forEach(cell => {
       const div = document.createElement('div');
       let cls = 'cell';

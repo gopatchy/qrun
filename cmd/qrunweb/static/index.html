@@ -169,7 +169,11 @@ function render(data) {
   function ref(b, s) { return b + ':' + s; }
 
   const triggerSourceSet = new Set();
-  data.triggers.forEach(t => triggerSourceSet.add(ref(t.source.block, t.source.signal)));
+  const startSignalMap = new Map();
+  data.triggers.forEach(t => {
+    triggerSourceSet.add(ref(t.source.block, t.source.signal));
+    if (t.source.signal === 'START') startSignalMap.set(t.source.block, t.targets);
+  });
 
   function blockTrack(bid) {
     const b = blockMap.get(bid);
@@ -233,8 +237,35 @@ function render(data) {
     toEnd.forEach(bid => { active.delete(blockTrack(bid)); pendingEnds.delete(bid); });
   }
 
+  function expandTargets(targetMap) {
+    const toExpand = [...targetMap.entries()].filter(([_, hook]) => hook === 'START');
+    toExpand.forEach(([bid]) => {
+      const extras = startSignalMap.get(bid);
+      if (extras) extras.forEach(et => { if (!targetMap.has(et.block)) targetMap.set(et.block, et.hook); });
+    });
+  }
+
+  function applyTargets(targetMap, tid, isCue) {
+    const entry = [...targetMap.entries()].find(([bid]) => blockTrack(bid) === tid);
+    if (!entry) return null;
+    const [bid, hook] = entry;
+    const isHook = !isCue;
+    if (hook === 'START') {
+      active.set(tid, bid);
+      wantTitle(bid);
+      return { blockId: bid, segment: 'start', event: 'START', isHook };
+    }
+    if (hook === 'END') return { blockId: bid, segment: 'end', event: 'END', isHook, directEnd: true };
+    if (hook === 'FADE_OUT') {
+      pendingEnds.add(bid);
+      return { blockId: bid, segment: 'mid', event: 'FADE_OUT' };
+    }
+    return null;
+  }
+
   function processTrigger(trigger) {
     const src = trigger.source;
+    if (src.signal === 'START') return;
     const isCue = src.signal === 'GO';
 
     flush();
@@ -252,15 +283,21 @@ function render(data) {
       }
       active.set(tid, tgt);
       wantTitle(tgt);
-      const startCells = trackIds.map(t =>
-        t === tid ? { blockId: tgt, segment: 'start', event: 'START' } : mid(t)
-      );
-      addRow(startCells);
+      const targetMap = new Map();
+      const extras = startSignalMap.get(tgt);
+      if (extras) extras.forEach(et => targetMap.set(et.block, et.hook));
+      expandTargets(targetMap);
+      const hasTargets = targetMap.size > 0;
+      const directEnds = [];
+      const startCells = trackIds.map(t => {
+        if (t === tid) return { blockId: tgt, segment: 'start', event: 'START', isSignal: hasTargets };
+        const cell = applyTargets(targetMap, t, false);
+        if (cell) { if (cell.directEnd) { directEnds.push(cell.blockId); delete cell.directEnd; } return cell; }
+        return mid(t);
+      });
+      addRow(startCells, hasTargets ? 'sig-row' : '');
+      directEnds.forEach(bid => active.delete(blockTrack(bid)));
       return;
-    }
-
-    if (!isCue && src.signal === 'START' && active.get(blockTrack(src.block)) !== src.block) {
-      active.set(blockTrack(src.block), src.block);
     }
 
     emitTitles();
@@ -269,6 +306,7 @@ function render(data) {
 
     const targetMap = new Map();
     trigger.targets.forEach(t => targetMap.set(t.block, t.hook));
+    expandTargets(targetMap);
 
     const directEnds = [];
 
@@ -277,29 +315,12 @@ function render(data) {
         return { cueLabel: blockMap.get(src.block).name };
 
       if (!isCue && blockTrack(src.block) === tid) {
-        const alreadyActive = active.get(tid) === src.block;
-        const seg = alreadyActive ? 'mid' : src.signal === 'START' ? 'start' : src.signal === 'END' ? 'end' : 'mid';
+        const seg = src.signal === 'END' ? 'end' : 'mid';
         return { blockId: src.block, segment: seg, event: src.signal, isSignal: true };
       }
 
-      const entry = [...targetMap.entries()].find(([bid]) => blockTrack(bid) === tid);
-      if (entry) {
-        const [bid, hook] = entry;
-        const isHook = !isCue;
-        if (hook === 'START') {
-          active.set(tid, bid);
-          wantTitle(bid);
-          return { blockId: bid, segment: 'start', event: 'START', isHook };
-        }
-        if (hook === 'END') {
-          directEnds.push(bid);
-          return { blockId: bid, segment: 'end', event: 'END', isHook };
-        }
-        if (hook === 'FADE_OUT') {
-          pendingEnds.add(bid);
-          return { blockId: bid, segment: 'mid', event: 'FADE_OUT' };
-        }
-      }
+      const cell = applyTargets(targetMap, tid, isCue);
+      if (cell) { if (cell.directEnd) { directEnds.push(cell.blockId); delete cell.directEnd; } return cell; }
 
       return mid(tid);
     });
@@ -309,7 +330,6 @@ function render(data) {
     directEnds.forEach(bid => active.delete(blockTrack(bid)));
 
     if (!isCue) {
-      if (src.signal === 'START' && !pendingTitles.has(src.block)) wantTitle(src.block);
       if (src.signal === 'FADE_OUT') pendingEnds.add(src.block);
       if (src.signal === 'END') {
         active.delete(blockTrack(src.block));

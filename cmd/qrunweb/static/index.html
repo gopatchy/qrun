@@ -161,6 +161,7 @@ fetch('show.json').then(r => r.json()).then(render);
 
 function render(data) {
   const blocks = new Map(data.blocks.map(b => [b.id, b]));
+  const trackById = new Map(data.tracks.map(t => [t.id, t]));
   const getTrack = id => blocks.get(id).type === 'cue' ? '_cue' : blocks.get(id).track;
   const trackIds = ['_cue', ...data.tracks.map(t => t.id)];
   
@@ -201,6 +202,13 @@ function render(data) {
 
   const mid = tid => active.has(tid) ? { blockId: active.get(tid), segment: 'mid' } : { empty: true };
   const mkCells = evs => trackIds.map(tid => evs.get(tid) || mid(tid));
+  const applySideEffect = (map, blockId, hook) => {
+    const tid = getTrack(blockId);
+    if (map.has(tid)) return;
+    if (hook === 'START') { active.set(tid, blockId); map.set(tid, { blockId, segment: 'start', event: 'START', isHook: true }); }
+    else if (hook === 'END') { map.set(tid, { blockId, segment: 'end', event: 'END', isHook: true }); active.delete(tid); }
+    else if (hook === 'FADE_OUT') { map.set(tid, { blockId, segment: 'mid', event: 'FADE_OUT' }); pending.add(blockId); }
+  };
 
   const flush = () => {
     const toEnd = [...pending].filter(bid => !data.triggers.some(t => t.source.block === bid && t.source.signal === 'END'));
@@ -233,13 +241,7 @@ function render(data) {
         starts.set(tid, { blockId: tgt, segment: 'start', event: 'START', isSignal: true });
         
         noTitle.add(rows.length-1);
-        sideEffects.forEach((h, b) => {
-          const ttid = getTrack(b);
-          if (starts.has(ttid)) return;
-          if (h === 'START') { active.set(ttid, b); starts.set(ttid, { blockId: b, segment: 'start', event: 'START', isHook: true }); }
-          else if (h === 'END') { starts.set(ttid, { blockId: b, segment: 'end', event: 'END', isHook: true }); active.delete(ttid); }
-          else if (h === 'FADE_OUT') { starts.set(ttid, { blockId: b, segment: 'mid', event: 'FADE_OUT' }); pending.add(b); }
-        });
+        sideEffects.forEach((h, b) => applySideEffect(starts, b, h));
         addRow(mkCells(starts), sideEffects.size ? 'sig-row' : '');
         continue;
       }
@@ -273,13 +275,7 @@ function render(data) {
       });
       noTitle.add(rows.length-1);
 
-      sideEffects.forEach((h, b) => {
-          const tid = getTrack(b);
-          if (starts.has(tid)) return;
-          if (h === 'START') { active.set(tid, b); starts.set(tid, { blockId: b, segment: 'start', event: 'START', isHook: true }); }
-          else if (h === 'END') { starts.set(tid, { blockId: b, segment: 'end', event: 'END', isHook: true }); active.delete(tid); }
-          else if (h === 'FADE_OUT') { starts.set(tid, { blockId: b, segment: 'mid', event: 'FADE_OUT' }); pending.add(b); }
-      });
+      sideEffects.forEach((h, b) => applySideEffect(starts, b, h));
 
       addRow(mkCells(starts), sideEffects.size ? 'sig-row' : '');
       i = j - 1;
@@ -389,7 +385,7 @@ function render(data) {
   trackIds.forEach(tid => {
     const el = document.createElement('div');
     el.className = 'track-header';
-    el.textContent = tid === '_cue' ? 'Cue' : (data.tracks.find(t => t.id === tid)||{}).name;
+    el.textContent = tid === '_cue' ? 'Cue' : (trackById.get(tid)||{}).name;
     timeline.appendChild(el);
   });
 

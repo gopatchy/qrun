@@ -166,38 +166,44 @@ fetch('show.json').then(r => r.json()).then(render);
 
 function render(data) {
   const blockMap = new Map(data.blocks.map(b => [b.id, b]));
-  const trackIds = data.tracks.map(t => t.id);
-  const trackType = new Map(data.tracks.map(t => [t.id, t.type]));
+  const CUE_TRACK = '_cue';
+  const trackIds = [CUE_TRACK, ...data.tracks.map(t => t.id)];
+
+  function ref(block, signal) { return block + ':' + signal; }
 
   const triggerTargetSet = new Set();
   const triggerSourceSet = new Set();
   data.triggers.forEach(t => {
-    triggerSourceSet.add(t.source);
-    t.targets.forEach(tgt => triggerTargetSet.add(tgt));
+    triggerSourceSet.add(ref(t.source.block, t.source.signal));
+    t.targets.forEach(tgt => triggerTargetSet.add(ref(tgt.block, tgt.hook)));
   });
 
   const trackBlocks = new Map();
   trackIds.forEach(id => trackBlocks.set(id, []));
-  data.blocks.forEach(b => trackBlocks.get(b.track).push(b.id));
+  data.blocks.forEach(b => {
+    const tid = b.type === 'cue' ? CUE_TRACK : b.track;
+    trackBlocks.get(tid).push(b.id);
+  });
+
+  function blockTrack(bid) {
+    const b = blockMap.get(bid);
+    return b.type === 'cue' ? CUE_TRACK : b.track;
+  }
 
   document.getElementById('header-status').innerHTML =
     '<span><span class="status-dot"></span>QLab Connected</span>' +
     '<span>Show: ' + data.show + '</span>' +
-    '<span>Cue: ' + data.blocks.filter(b => b.track === 'cue').length + '</span>';
+    '<span>Cue: ' + data.blocks.filter(b => b.type === 'cue').length + '</span>';
 
   const active = new Map();
   const pendingEnds = new Set();
   const pendingTitles = new Set();
   const rows = [];
-  function btype(blockId) {
-    const b = blockMap.get(blockId);
-    return b.type || trackType.get(b.track);
-  }
 
-  function nextInTrack(blockId) {
-    const b = blockMap.get(blockId);
-    const seq = trackBlocks.get(b.track);
-    const idx = seq.indexOf(blockId);
+  function nextInTrack(bid) {
+    const tid = blockTrack(bid);
+    const seq = trackBlocks.get(tid);
+    const idx = seq.indexOf(bid);
     return idx < seq.length - 1 ? seq[idx + 1] : null;
   }
 
@@ -211,14 +217,13 @@ function render(data) {
   }
 
   function canAutoStart(bid) {
-    const ref = bid + ':start';
-    return !triggerTargetSet.has(ref) && !triggerSourceSet.has(ref);
+    return !triggerTargetSet.has(ref(bid, 'START')) && !triggerSourceSet.has(ref(bid, 'START'));
   }
 
   function emitTitles() {
     if (pendingTitles.size === 0) return;
     const cells = trackIds.map(tid => {
-      const t = [...pendingTitles].find(bid => blockMap.get(bid).track === tid);
+      const t = [...pendingTitles].find(bid => blockTrack(bid) === tid);
       return t ? { blockId: t, segment: 'mid', title: blockMap.get(t).name } : mid(tid);
     });
     addRow(cells);
@@ -233,25 +238,25 @@ function render(data) {
     });
     if (starts.length === 0) return;
     const cells = trackIds.map(tid => {
-      const s = starts.find(bid => blockMap.get(bid).track === tid);
+      const s = starts.find(bid => blockTrack(bid) === tid);
       if (s) {
         active.set(tid, s);
         pendingTitles.add(s);
-        return { blockId: s, segment: 'start', event: 'start' };
+        return { blockId: s, segment: 'start', event: 'START' };
       }
       return mid(tid);
     });
     addRow(cells);
   }
 
-  function flush(upcomingSource) {
+  function flush(upcomingSrc) {
     emitTitles();
     if (pendingEnds.size === 0) return;
 
     const holdBack = new Set();
-    if (upcomingSource) {
+    if (upcomingSrc) {
       for (const bid of pendingEnds) {
-        if (upcomingSource === bid + ':end') holdBack.add(bid);
+        if (upcomingSrc.block === bid && upcomingSrc.signal === 'END') holdBack.add(bid);
       }
     }
 
@@ -259,36 +264,35 @@ function render(data) {
     if (toEnd.length === 0) return;
 
     const cells = trackIds.map(tid => {
-      const e = toEnd.find(bid => blockMap.get(bid).track === tid);
-      return e ? { blockId: e, segment: 'end', event: 'end' } : mid(tid);
+      const e = toEnd.find(bid => blockTrack(bid) === tid);
+      return e ? { blockId: e, segment: 'end', event: 'END' } : mid(tid);
     });
     addRow(cells);
-    toEnd.forEach(bid => { active.delete(blockMap.get(bid).track); pendingEnds.delete(bid); });
+    toEnd.forEach(bid => { active.delete(blockTrack(bid)); pendingEnds.delete(bid); });
 
     doAutoStarts(toEnd);
     emitTitles();
   }
 
   function processTrigger(trigger) {
-    const source = trigger.source;
-    const isCue = !source.includes(':');
+    const src = trigger.source;
+    const isCue = src.signal === 'GO';
 
-    flush(source);
+    flush(src);
 
     if (!isCue) {
-      const [srcBlock, srcEvent] = source.split(':');
-      const b = blockMap.get(srcBlock);
-      if (srcEvent === 'start') {
-        const cur = active.get(b.track);
-        if (cur && cur !== srcBlock) {
+      const tid = blockTrack(src.block);
+      if (src.signal === 'START') {
+        const cur = active.get(tid);
+        if (cur && cur !== src.block) {
           pendingEnds.delete(cur);
-          const cells = trackIds.map(tid =>
-            tid === b.track ? { blockId: cur, segment: 'end', event: 'end' } : mid(tid)
+          const cells = trackIds.map(t =>
+            t === tid ? { blockId: cur, segment: 'end', event: 'END' } : mid(t)
           );
           addRow(cells);
-          active.delete(b.track);
+          active.delete(tid);
         }
-        active.set(b.track, srcBlock);
+        active.set(tid, src.block);
       }
     }
 
@@ -297,41 +301,35 @@ function render(data) {
     const rowClass = isCue ? 'cue-row' : 'sig-row';
 
     const targetMap = new Map();
-    trigger.targets.forEach(t => {
-      const p = t.split(':');
-      targetMap.set(p[0], p[1]);
-    });
+    trigger.targets.forEach(t => targetMap.set(t.block, t.hook));
 
     const directEnds = [];
 
     const cells = trackIds.map(tid => {
-      if (isCue && tid === 'cue')
-        return { cueLabel: blockMap.get(source).name };
+      if (isCue && tid === CUE_TRACK)
+        return { cueLabel: blockMap.get(src.block).name };
 
-      if (!isCue) {
-        const [srcBlock, srcEvent] = source.split(':');
-        if (blockMap.get(srcBlock).track === tid) {
-          const seg = srcEvent === 'start' ? 'start' : srcEvent === 'end' ? 'end' : 'mid';
-          return { blockId: srcBlock, segment: seg, event: srcEvent, isSignal: true };
-        }
+      if (!isCue && blockTrack(src.block) === tid) {
+        const seg = src.signal === 'START' ? 'start' : src.signal === 'END' ? 'end' : 'mid';
+        return { blockId: src.block, segment: seg, event: src.signal, isSignal: true };
       }
 
-      const entry = [...targetMap.entries()].find(([bid]) => blockMap.get(bid).track === tid);
+      const entry = [...targetMap.entries()].find(([bid]) => blockTrack(bid) === tid);
       if (entry) {
-        const [bid, evt] = entry;
+        const [bid, hook] = entry;
         const isHook = !isCue;
-        if (evt === 'start') {
+        if (hook === 'START') {
           active.set(tid, bid);
           pendingTitles.add(bid);
-          return { blockId: bid, segment: 'start', event: 'start', isHook };
+          return { blockId: bid, segment: 'start', event: 'START', isHook };
         }
-        if (evt === 'end') {
+        if (hook === 'END') {
           directEnds.push(bid);
-          return { blockId: bid, segment: 'end', event: 'end', isHook: isHook };
+          return { blockId: bid, segment: 'end', event: 'END', isHook };
         }
-        if (evt === 'fade_out') {
+        if (hook === 'FADE_OUT') {
           pendingEnds.add(bid);
-          return { blockId: bid, segment: 'mid', event: 'fade_out' };
+          return { blockId: bid, segment: 'mid', event: 'FADE_OUT' };
         }
       }
 
@@ -340,17 +338,16 @@ function render(data) {
 
     addRow(cells, rowClass);
 
-    directEnds.forEach(bid => active.delete(blockMap.get(bid).track));
+    directEnds.forEach(bid => active.delete(blockTrack(bid)));
     doAutoStarts(directEnds);
 
     if (!isCue) {
-      const [srcBlock, srcEvent] = source.split(':');
-      if (srcEvent === 'start') pendingTitles.add(srcBlock);
-      if (srcEvent === 'fade_out') pendingEnds.add(srcBlock);
-      if (srcEvent === 'end') {
-        active.delete(blockMap.get(srcBlock).track);
-        pendingEnds.delete(srcBlock);
-        doAutoStarts([srcBlock]);
+      if (src.signal === 'START') pendingTitles.add(src.block);
+      if (src.signal === 'FADE_OUT') pendingEnds.add(src.block);
+      if (src.signal === 'END') {
+        active.delete(blockTrack(src.block));
+        pendingEnds.delete(src.block);
+        doAutoStarts([src.block]);
       }
     }
   }
@@ -359,22 +356,27 @@ function render(data) {
   flush(null);
   emitTitles();
 
-  const infBlocks = data.blocks.filter(b => b.infinity);
-  if (infBlocks.length > 0) {
+  const stillActive = [];
+  for (const [tid, bid] of active) {
+    if (tid !== CUE_TRACK) stillActive.push(bid);
+  }
+  if (stillActive.length > 0) {
     const cells = trackIds.map(tid => {
-      const inf = infBlocks.find(b => b.track === tid);
-      return inf ? { blockId: inf.id, segment: 'mid', infinity: true } : mid(tid);
+      const bid = stillActive.find(b => blockTrack(b) === tid);
+      return bid ? { blockId: bid, segment: 'mid', infinity: true } : mid(tid);
     });
     addRow(cells);
   }
 
   const timeline = document.getElementById('timeline');
+  const trackNames = { [CUE_TRACK]: 'Cue' };
+  data.tracks.forEach(t => { trackNames[t.id] = t.name; });
   timeline.style.gridTemplateColumns = 'repeat(' + trackIds.length + ', 140px)';
 
-  data.tracks.forEach(t => {
+  trackIds.forEach(tid => {
     const th = document.createElement('div');
     th.className = 'track-header';
-    th.textContent = t.name;
+    th.textContent = trackNames[tid];
     timeline.appendChild(th);
   });
 
@@ -395,7 +397,7 @@ function render(data) {
       } else if (cell.title) {
         div.className = cls;
         const block = document.createElement('div');
-        block.className = 'block block-mid ' + btype(cell.blockId);
+        block.className = 'block block-mid ' + blockMap.get(cell.blockId).type;
         const t = document.createElement('div');
         t.className = 'title';
         t.textContent = cell.title;
@@ -404,7 +406,7 @@ function render(data) {
       } else if (cell.infinity) {
         div.className = cls + ' infinity-cell';
         const block = document.createElement('div');
-        block.className = 'block block-mid ' + btype(cell.blockId);
+        block.className = 'block block-mid ' + blockMap.get(cell.blockId).type;
         div.appendChild(block);
         const marker = document.createElement('div');
         marker.className = 'infinity-marker';
@@ -414,7 +416,7 @@ function render(data) {
         div.className = cls;
         const seg = cell.segment || 'mid';
         const block = document.createElement('div');
-        block.className = 'block block-' + seg + ' ' + btype(cell.blockId);
+        block.className = 'block block-' + seg + ' ' + blockMap.get(cell.blockId).type;
         if (cell.event) {
           const hook = document.createElement('div');
           let hookCls = 'hook';

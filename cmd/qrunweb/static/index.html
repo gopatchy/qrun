@@ -25,7 +25,7 @@
   --audio-bg: rgba(10, 10, 42, 0.55);
   --delay-color: #999;
   --delay-bg: rgba(26, 26, 26, 0.55);
-  --current-row: #2a3a1a;
+  --current-row: #304a20;
   --infinity-color: #666;
 }
 
@@ -75,7 +75,8 @@ header h1 { font-size: 16px; font-weight: 600; letter-spacing: 0.05em; }
 }
 .cell.row-current {
   background: var(--current-row);
-  box-shadow: inset 0 0 0 1px rgba(80, 200, 80, 0.25);
+  border-top: 1px solid rgba(80, 200, 80, 0.5);
+  border-bottom: 1px solid rgba(80, 200, 80, 0.5);
 }
 
 .block {
@@ -113,9 +114,17 @@ header h1 { font-size: 16px; font-weight: 600; letter-spacing: 0.05em; }
 }
 
 .sig {
-  background: rgba(255, 255, 255, 0.15);
+  background: #fc0;
+  color: #000;
   border-radius: 2px;
   padding: 0 6px;
+  font-weight: 700;
+}
+
+.hk {
+  border: 1px solid #fc0;
+  border-radius: 2px;
+  padding: 0 5px;
 }
 
 .title {
@@ -158,11 +167,11 @@ header h1 { font-size: 16px; font-weight: 600; letter-spacing: 0.05em; }
 
 <!-- R1: Q10 GO=sig, all starts=hk -->
 <div class="cell"><div class="block block-single cue"><div class="cue-label">Q10 Preshow</div></div></div>
-<div class="cell"><div class="block block-start light"><div class="hook hk">start</div></div></div>
-<div class="cell"><div class="block block-start light"><div class="hook hk">start</div></div></div>
-<div class="cell"><div class="block block-start video"><div class="hook hk">start</div></div></div>
+<div class="cell"><div class="block block-start light"><div class="hook">start</div></div></div>
+<div class="cell"><div class="block block-start light"><div class="hook">start</div></div></div>
+<div class="cell"><div class="block block-start video"><div class="hook">start</div></div></div>
 <div class="cell"></div>
-<div class="cell"><div class="block block-start audio"><div class="hook hk">start</div></div></div>
+<div class="cell"><div class="block block-start audio"><div class="hook">start</div></div></div>
 <!-- R2: titles -->
 <div class="cell"></div>
 <div class="cell"><div class="block block-mid light"><div class="title">Preshow Wash</div></div></div>
@@ -173,7 +182,7 @@ header h1 { font-size: 16px; font-weight: 600; letter-spacing: 0.05em; }
 <!-- R3: Q11 GO=sig, fade out=hk -->
 <div class="cell"><div class="block block-single cue"><div class="cue-label">Q11 House Open</div></div></div>
 <div class="cell"><div class="block block-mid light"></div></div>
-<div class="cell"><div class="block block-mid light"><div class="hook hk">fade out</div></div></div>
+<div class="cell"><div class="block block-mid light"><div class="hook">fade out</div></div></div>
 <div class="cell"><div class="block block-mid video"></div></div>
 <div class="cell"></div>
 <div class="cell"><div class="block block-mid audio"></div></div>
@@ -187,35 +196,35 @@ header h1 { font-size: 16px; font-weight: 600; letter-spacing: 0.05em; }
 <!-- R5: Cool 50% start=hk (connected to Warm end above) -->
 <div class="cell"></div>
 <div class="cell"><div class="block block-mid light"></div></div>
-<div class="cell"><div class="block block-start light"><div class="hook hk">start</div></div></div>
+<div class="cell"><div class="block block-start light"><div class="hook">start</div></div></div>
 <div class="cell"><div class="block block-mid video"></div></div>
 <div class="cell"></div>
 <div class="cell"><div class="block block-mid audio"></div></div>
 <!-- R6: Q12 GO=sig, fade outs=hk -->
 <div class="cell row-current"><div class="block block-single cue"><div class="cue-label" style="font-weight:700">Q12 Top of Show</div></div></div>
-<div class="cell row-current"><div class="block block-mid light"><div class="hook hk">fade out</div></div></div>
+<div class="cell row-current"><div class="block block-mid light"><div class="hook">fade out</div></div></div>
 <div class="cell row-current"><div class="block block-mid light"></div></div>
-<div class="cell row-current"><div class="block block-mid video"><div class="hook hk">fade out</div></div></div>
+<div class="cell row-current"><div class="block block-mid video"><div class="hook">fade out</div></div></div>
 <div class="cell row-current"></div>
-<div class="cell row-current"><div class="block block-mid audio"><div class="hook hk">fade out</div></div></div>
+<div class="cell row-current"><div class="block block-mid audio"><div class="hook">fade out</div></div></div>
 <!-- R7: all ends=hk (completing fades from Q12) -->
 <div class="cell"></div>
-<div class="cell"><div class="block block-end light"><div class="hook hk">end</div></div></div>
+<div class="cell"><div class="block block-end light"><div class="hook">end</div></div></div>
 <div class="cell"><div class="block block-mid light"></div></div>
-<div class="cell"><div class="block block-end video"><div class="hook hk">end</div></div></div>
+<div class="cell"><div class="block block-end video"><div class="hook">end</div></div></div>
 <div class="cell"></div>
-<div class="cell"><div class="block block-end audio"><div class="hook hk">end</div></div></div>
-<!-- R8: delay start=hk (connected to ends above), Cool 50% title -->
+<div class="cell"><div class="block block-end audio"><div class="hook">end</div></div></div>
+<!-- R8: delay start=hk (connected to ends above) -->
+<div class="cell"></div>
+<div class="cell"></div>
+<div class="cell"><div class="block block-mid light"></div></div>
+<div class="cell"><div class="block block-start delay"><div class="hook">start</div></div></div>
+<div class="cell"></div>
+<div class="cell"></div>
+<!-- R9: titles (Cool 50%, 3s Delay) -->
 <div class="cell"></div>
 <div class="cell"></div>
 <div class="cell"><div class="block block-mid light"><div class="title">Cool 50%</div></div></div>
-<div class="cell"><div class="block block-start delay"><div class="hook hk">start</div></div></div>
-<div class="cell"></div>
-<div class="cell"></div>
-<!-- R9: delay title -->
-<div class="cell"></div>
-<div class="cell"></div>
-<div class="cell"><div class="block block-mid light"></div></div>
 <div class="cell"><div class="block block-mid delay"><div class="title">3s Delay</div></div></div>
 <div class="cell"></div>
 <div class="cell"></div>
@@ -229,35 +238,35 @@ header h1 { font-size: 16px; font-weight: 600; letter-spacing: 0.05em; }
 <!-- R11: Cool 50% end=sig, SC1 Focus start=hk, Sc1 Projection start=hk, Storm Ambience start=hk -->
 <div class="cell"></div>
 <div class="cell"><div class="block block-start light"><div class="hook hk">start</div></div></div>
-<div class="cell"><div class="block block-end light"><div class="hook">end</div></div></div>
+<div class="cell"><div class="block block-end light"><div class="hook hk">end</div></div></div>
 <div class="cell"><div class="block block-start video"><div class="hook sig">start</div></div></div>
 <div class="cell"></div>
 <div class="cell"><div class="block block-start audio"><div class="hook hk">start</div></div></div>
-<!-- R12: SC1 Blue start=sig, Lightning start=hk, Storm fade in=hk -->
+<!-- R12: SC1 Blue start=sig, Lightning start=hk -->
 <div class="cell"></div>
 <div class="cell"><div class="block block-mid light"></div></div>
 <div class="cell"><div class="block block-start light"><div class="hook sig">start</div></div></div>
 <div class="cell"><div class="block block-mid video"></div></div>
 <div class="cell"><div class="block block-start overlay"><div class="hook hk">start</div></div></div>
-<div class="cell"><div class="block block-mid audio"><div class="hook hk">fade in</div></div></div>
-<!-- R13: titles (Sc1 Projection, Lightning Flash) -->
-<div class="cell"></div>
-<div class="cell"><div class="block block-mid light"></div></div>
-<div class="cell"><div class="block block-mid light"></div></div>
-<div class="cell"><div class="block block-mid video"><div class="title">Sc1 Projection</div></div></div>
-<div class="cell"><div class="block block-mid overlay"><div class="title">Lightning Flash</div></div></div>
 <div class="cell"><div class="block block-mid audio"></div></div>
-<!-- R14: Lightning end, SC1 Focus title, Storm Ambience title -->
+<!-- R12b: Storm fade in (within-track) -->
 <div class="cell"></div>
-<div class="cell"><div class="block block-mid light"><div class="title">SC1 Focus</div></div></div>
+<div class="cell"><div class="block block-mid light"></div></div>
 <div class="cell"><div class="block block-mid light"></div></div>
 <div class="cell"><div class="block block-mid video"></div></div>
 <div class="cell"><div class="block block-mid overlay"></div></div>
+<div class="cell"><div class="block block-mid audio"><div class="hook">fade in</div></div></div>
+<!-- R13: titles (SC1 Focus, SC1 Blue 80%, Sc1 Projection, Lightning Flash, Storm Ambience) -->
+<div class="cell"></div>
+<div class="cell"><div class="block block-mid light"><div class="title">SC1 Focus</div></div></div>
+<div class="cell"><div class="block block-mid light"><div class="title">SC1 Blue 80%</div></div></div>
+<div class="cell"><div class="block block-mid video"><div class="title">Sc1 Projection</div></div></div>
+<div class="cell"><div class="block block-mid overlay"><div class="title">Lightning Flash</div></div></div>
 <div class="cell"><div class="block block-mid audio"><div class="title">Storm Ambience</div></div></div>
-<!-- R15: Projection fade out=sig, Wave start=hk, SC1 Blue title -->
+<!-- R15: Projection fade out=sig, Lightning end=hk -->
 <div class="cell"></div>
 <div class="cell"><div class="block block-mid light"></div></div>
-<div class="cell"><div class="block block-mid light"><div class="title">SC1 Blue 80%</div></div></div>
+<div class="cell"><div class="block block-mid light"></div></div>
 <div class="cell"><div class="block block-mid video"><div class="hook sig">fade out</div></div></div>
 <div class="cell"><div class="block block-end overlay"><div class="hook hk">end</div></div></div>
 <div class="cell"><div class="block block-mid audio"></div></div>
@@ -270,11 +279,11 @@ header h1 { font-size: 16px; font-weight: 600; letter-spacing: 0.05em; }
 <div class="cell"><div class="block block-mid audio"></div></div>
 <!-- R17: Q13 GO=sig, SC1 Focus fade=hk, SC1 Blue fade=hk, Storm fade=hk -->
 <div class="cell"><div class="block block-single cue"><div class="cue-label">Q13 Sc1 Dialog</div></div></div>
-<div class="cell"><div class="block block-mid light"><div class="hook hk">fade out</div></div></div>
-<div class="cell"><div class="block block-mid light"><div class="hook hk">fade out</div></div></div>
+<div class="cell"><div class="block block-mid light"><div class="hook">fade out</div></div></div>
+<div class="cell"><div class="block block-mid light"><div class="hook">fade out</div></div></div>
 <div class="cell"></div>
 <div class="cell"><div class="block block-mid overlay"></div></div>
-<div class="cell"><div class="block block-mid audio"><div class="hook hk">fade out</div></div></div>
+<div class="cell"><div class="block block-mid audio"><div class="hook">fade out</div></div></div>
 <!-- R18: SC1 Focus end -->
 <div class="cell"></div>
 <div class="cell"><div class="block block-end light"><div class="hook">end</div></div></div>
@@ -288,35 +297,42 @@ header h1 { font-size: 16px; font-weight: 600; letter-spacing: 0.05em; }
 <div class="cell"><div class="block block-mid light"></div></div>
 <div class="cell"></div>
 <div class="cell"><div class="block block-mid overlay"></div></div>
-<div class="cell"><div class="block block-end audio"><div class="hook hk">end</div></div></div>
-<!-- R19: SC1 Blue end=sig, Dialog Spots start=hk, Wave Overlay title, Dialog Underscore start=hk -->
+<div class="cell"><div class="block block-end audio"><div class="hook">end</div></div></div>
+<!-- R19: SC1 Blue end (within-track) -->
 <div class="cell"></div>
-<div class="cell"><div class="block block-start light"><div class="hook hk">start</div></div></div>
+<div class="cell"></div>
 <div class="cell"><div class="block block-end light"><div class="hook">end</div></div></div>
 <div class="cell"></div>
-<div class="cell"><div class="block block-mid overlay"><div class="title">Wave Overlay</div></div></div>
-<div class="cell"><div class="block block-start audio"><div class="hook sig">start</div></div></div>
-<!-- R20: Warm 90% start=hk, Dialog Underscore title -->
+<div class="cell"><div class="block block-mid overlay"></div></div>
 <div class="cell"></div>
-<div class="cell"><div class="block block-mid light"></div></div>
+<!-- R19b: Dialog Underscore start=sig, Dialog Spots start=hk -->
+<div class="cell"></div>
 <div class="cell"><div class="block block-start light"><div class="hook hk">start</div></div></div>
 <div class="cell"></div>
+<div class="cell"></div>
 <div class="cell"><div class="block block-mid overlay"></div></div>
-<div class="cell"><div class="block block-mid audio"><div class="title">Dialog Underscore</div></div></div>
-<!-- R21: titles (Dialog Spots, Warm 90%) -->
+<div class="cell"><div class="block block-start audio"><div class="hook sig">start</div></div></div>
+<!-- R20: Warm 90% start=hk -->
+<div class="cell"></div>
+<div class="cell"><div class="block block-mid light"></div></div>
+<div class="cell"><div class="block block-start light"><div class="hook">start</div></div></div>
+<div class="cell"></div>
+<div class="cell"><div class="block block-mid overlay"></div></div>
+<div class="cell"><div class="block block-mid audio"></div></div>
+<!-- R21: titles (Dialog Spots, Warm 90%, Wave Overlay, Dialog Underscore) -->
 <div class="cell"></div>
 <div class="cell"><div class="block block-mid light"><div class="title">Dialog Spots</div></div></div>
 <div class="cell"><div class="block block-mid light"><div class="title">Warm 90%</div></div></div>
 <div class="cell"></div>
-<div class="cell"><div class="block block-mid overlay"></div></div>
-<div class="cell"><div class="block block-mid audio"></div></div>
+<div class="cell"><div class="block block-mid overlay"><div class="title">Wave Overlay</div></div></div>
+<div class="cell"><div class="block block-mid audio"><div class="title">Dialog Underscore</div></div></div>
 <!-- R22: Q14 GO=sig, Dialog Spots fade=hk, Warm 90% fade=hk, Sc2 Bg start=hk, Wave fade=hk, Dialog Underscore end=hk -->
 <div class="cell"><div class="block block-single cue"><div class="cue-label">Q14 Sc2 Trans</div></div></div>
-<div class="cell"><div class="block block-mid light"><div class="hook hk">fade out</div></div></div>
-<div class="cell"><div class="block block-mid light"><div class="hook hk">fade out</div></div></div>
-<div class="cell"><div class="block block-start video"><div class="hook hk">start</div></div></div>
-<div class="cell"><div class="block block-mid overlay"><div class="hook hk">fade out</div></div></div>
-<div class="cell"><div class="block block-end audio"><div class="hook hk">end</div></div></div>
+<div class="cell"><div class="block block-mid light"><div class="hook">fade out</div></div></div>
+<div class="cell"><div class="block block-mid light"><div class="hook">fade out</div></div></div>
+<div class="cell"><div class="block block-start video"><div class="hook">start</div></div></div>
+<div class="cell"><div class="block block-mid overlay"><div class="hook">fade out</div></div></div>
+<div class="cell"><div class="block block-end audio"><div class="hook">end</div></div></div>
 <!-- R23: lighting ends (completing fades from Q14) -->
 <div class="cell"></div>
 <div class="cell"><div class="block block-end light"><div class="hook">end</div></div></div>
@@ -324,21 +340,28 @@ header h1 { font-size: 16px; font-weight: 600; letter-spacing: 0.05em; }
 <div class="cell"><div class="block block-mid video"></div></div>
 <div class="cell"><div class="block block-mid overlay"></div></div>
 <div class="cell"></div>
-<!-- R24: Wave Overlay end=sig, SC2 Focus start (within-track), SC2 Amber start (within-track), SC2 Atmos start=hk -->
+<!-- R24: SC2 Focus start (within-track), SC2 Amber start (within-track) -->
 <div class="cell"></div>
 <div class="cell"><div class="block block-start light"><div class="hook">start</div></div></div>
 <div class="cell"><div class="block block-start light"><div class="hook">start</div></div></div>
-<div class="cell"><div class="block block-mid video"><div class="title">Sc2 Background</div></div></div>
+<div class="cell"><div class="block block-mid video"></div></div>
+<div class="cell"><div class="block block-mid overlay"></div></div>
+<div class="cell"></div>
+<!-- R25: Wave Overlay end=sig, SC2 Atmos start=hk -->
+<div class="cell"></div>
+<div class="cell"><div class="block block-mid light"></div></div>
+<div class="cell"><div class="block block-mid light"></div></div>
+<div class="cell"><div class="block block-mid video"></div></div>
 <div class="cell"><div class="block block-end overlay"><div class="hook sig">end</div></div></div>
 <div class="cell"><div class="block block-start audio"><div class="hook hk">start</div></div></div>
-<!-- R25: titles (SC2 Focus, SC2 Amber, SC2 Atmos) -->
+<!-- R26: titles (SC2 Focus, SC2 Amber, Sc2 Background, SC2 Atmos) -->
 <div class="cell"></div>
 <div class="cell"><div class="block block-mid light"><div class="title">SC2 Focus</div></div></div>
 <div class="cell"><div class="block block-mid light"><div class="title">SC2 Amber 60%</div></div></div>
-<div class="cell"><div class="block block-mid video"></div></div>
+<div class="cell"><div class="block block-mid video"><div class="title">Sc2 Background</div></div></div>
 <div class="cell"></div>
 <div class="cell"><div class="block block-mid audio"><div class="title">SC2 Atmos</div></div></div>
-<!-- R26: infinity -->
+<!-- R27: infinity -->
 <div class="cell"></div>
 <div class="cell infinity-cell"><div class="block block-mid light"></div><div class="infinity-marker">&#x223F;&#x223F;&#x223F;</div></div>
 <div class="cell infinity-cell"><div class="block block-mid light"></div><div class="infinity-marker">&#x223F;&#x223F;&#x223F;</div></div>

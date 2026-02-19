@@ -268,11 +268,11 @@ function render(data) {
     if (src.signal === 'START') return;
     const isCue = src.signal === 'GO';
 
-    flush();
-
     if (isChain(trigger)) {
       const tid = blockTrack(src.block);
       const tgt = trigger.targets[0].block;
+      const sourceHandled = active.get(tid) !== src.block && !pendingEnds.has(src.block);
+      if (!sourceHandled) flush();
       if (active.get(tid) === src.block || pendingEnds.has(src.block)) {
         pendingEnds.delete(src.block);
         const endCells = trackIds.map(t =>
@@ -300,6 +300,7 @@ function render(data) {
       return;
     }
 
+    flush();
     emitTitles();
 
     const rowClass = isCue ? 'cue-row' : 'sig-row';

@@ -25,7 +25,6 @@
   --audio-bg: rgba(10, 10, 42, 0.55);
   --delay-color: #999;
   --delay-bg: rgba(26, 26, 26, 0.55);
-  --current-row: #304a20;
   --infinity-color: #666;
 }
 
@@ -54,7 +53,6 @@ header h1 { font-size: 16px; font-weight: 600; letter-spacing: 0.05em; }
 
 .timeline {
   display: grid;
-  grid-template-columns: repeat(6, 140px);
   grid-auto-rows: 24px;
 }
 
@@ -72,11 +70,6 @@ header h1 { font-size: 16px; font-weight: 600; letter-spacing: 0.05em; }
   padding: 0; position: relative;
   display: flex; flex-direction: column;
   justify-content: center;
-}
-.cell.row-current {
-  background: var(--current-row);
-  border-top: 1px solid rgba(80, 200, 80, 0.5);
-  border-bottom: 1px solid rgba(80, 200, 80, 0.5);
 }
 
 .block {
@@ -112,11 +105,6 @@ header h1 { font-size: 16px; font-weight: 600; letter-spacing: 0.05em; }
 .cell.sig-row {
   background: rgba(255, 204, 0, 0.07);
   border-top: 1px solid rgba(255, 204, 0, 0.3);
-  border-bottom: 1px solid rgba(255, 204, 0, 0.3);
-}
-.cell.sig-row-alt {
-  background: rgba(255, 204, 0, 0.14);
-  border-top: none;
   border-bottom: 1px solid rgba(255, 204, 0, 0.3);
 }
 .block.light { color: var(--light-color); border-color: var(--light-color); background: var(--light-bg); }
@@ -167,228 +155,282 @@ header h1 { font-size: 16px; font-weight: 600; letter-spacing: 0.05em; }
 <div class="app">
 <header>
   <h1>QRUN</h1>
-  <div class="header-status">
-    <span><span class="status-dot"></span>QLab Connected</span>
-    <span>Show: The Tempest</span>
-    <span>Cue: 12 / 47</span>
-  </div>
+  <div class="header-status" id="header-status"></div>
 </header>
 <div class="timeline-container">
-<div class="timeline">
-
-<div class="track-header">Cue</div>
-<div class="track-header">Lighting A</div>
-<div class="track-header">Lighting B</div>
-<div class="track-header">Video</div>
-<div class="track-header">Video OVL</div>
-<div class="track-header">Audio</div>
-
-<!-- R1: Q10 GO=sig, all starts=hk -->
-<div class="cell cue-row"><div class="cue-label">Q10 Preshow</div></div>
-<div class="cell cue-row"><div class="block block-start light"><div class="hook">start</div></div></div>
-<div class="cell cue-row"><div class="block block-start light"><div class="hook">start</div></div></div>
-<div class="cell cue-row"><div class="block block-start video"><div class="hook">start</div></div></div>
-<div class="cell cue-row"></div>
-<div class="cell cue-row"><div class="block block-start audio"><div class="hook">start</div></div></div>
-<!-- R2: titles -->
-<div class="cell"></div>
-<div class="cell"><div class="block block-mid light"><div class="title">Preshow Wash</div></div></div>
-<div class="cell"><div class="block block-mid light"><div class="title">Warm 70%</div></div></div>
-<div class="cell"><div class="block block-mid video"><div class="title">Preshow Loop</div></div></div>
-<div class="cell"></div>
-<div class="cell"><div class="block block-mid audio"><div class="title">Preshow Music</div></div></div>
-<!-- R3: Q11 GO=sig, fade out=hk -->
-<div class="cell cue-row"><div class="cue-label">Q11 House Open</div></div>
-<div class="cell cue-row"><div class="block block-mid light"></div></div>
-<div class="cell cue-row"><div class="block block-mid light"><div class="hook">fade out</div></div></div>
-<div class="cell cue-row"><div class="block block-mid video"></div></div>
-<div class="cell cue-row"></div>
-<div class="cell cue-row"><div class="block block-mid audio"></div></div>
-<!-- R4: Warm 70% end -->
-<div class="cell"></div>
-<div class="cell"><div class="block block-mid light"></div></div>
-<div class="cell"><div class="block block-end light"><div class="hook">end</div></div></div>
-<div class="cell"><div class="block block-mid video"></div></div>
-<div class="cell"></div>
-<div class="cell"><div class="block block-mid audio"></div></div>
-<!-- R5: Cool 50% start=hk (connected to Warm end above) -->
-<div class="cell"></div>
-<div class="cell"><div class="block block-mid light"></div></div>
-<div class="cell"><div class="block block-start light"><div class="hook">start</div></div></div>
-<div class="cell"><div class="block block-mid video"></div></div>
-<div class="cell"></div>
-<div class="cell"><div class="block block-mid audio"></div></div>
-<!-- R6: Q12 GO=sig, fade outs=hk -->
-<div class="cell cue-row row-current"><div class="cue-label" style="font-weight:700">Q12 Top of Show</div></div>
-<div class="cell cue-row row-current"><div class="block block-mid light"><div class="hook">fade out</div></div></div>
-<div class="cell cue-row row-current"><div class="block block-mid light"></div></div>
-<div class="cell cue-row row-current"><div class="block block-mid video"><div class="hook">fade out</div></div></div>
-<div class="cell cue-row row-current"></div>
-<div class="cell cue-row row-current"><div class="block block-mid audio"><div class="hook">fade out</div></div></div>
-<!-- R7: all ends=hk (completing fades from Q12) -->
-<div class="cell"></div>
-<div class="cell"><div class="block block-end light"><div class="hook">end</div></div></div>
-<div class="cell"><div class="block block-mid light"></div></div>
-<div class="cell"><div class="block block-end video"><div class="hook">end</div></div></div>
-<div class="cell"></div>
-<div class="cell"><div class="block block-end audio"><div class="hook">end</div></div></div>
-<!-- R8: delay start=hk (connected to ends above) -->
-<div class="cell"></div>
-<div class="cell"></div>
-<div class="cell"><div class="block block-mid light"></div></div>
-<div class="cell"><div class="block block-start delay"><div class="hook">start</div></div></div>
-<div class="cell"></div>
-<div class="cell"></div>
-<!-- R9: titles (Cool 50%, 3s Delay) -->
-<div class="cell"></div>
-<div class="cell"></div>
-<div class="cell"><div class="block block-mid light"><div class="title">Cool 50%</div></div></div>
-<div class="cell"><div class="block block-mid delay"><div class="title">3s Delay</div></div></div>
-<div class="cell"></div>
-<div class="cell"></div>
-<!-- R10: delay end=sig -->
-<div class="cell"></div>
-<div class="cell"></div>
-<div class="cell"><div class="block block-mid light"></div></div>
-<div class="cell"><div class="block block-end delay"><div class="hook">end</div></div></div>
-<div class="cell"></div>
-<div class="cell"></div>
-<!-- R11: Cool 50% end=sig, SC1 Focus start=hk, Sc1 Projection start=hk, Storm Ambience start=hk -->
-<div class="cell sig-row"></div>
-<div class="cell sig-row"><div class="block block-start light"><div class="hook hk">start</div></div></div>
-<div class="cell sig-row"><div class="block block-end light"><div class="hook hk">end</div></div></div>
-<div class="cell sig-row"><div class="block block-start video"><div class="hook sig">start</div></div></div>
-<div class="cell sig-row"></div>
-<div class="cell sig-row"><div class="block block-start audio"><div class="hook hk">start</div></div></div>
-<!-- R12: SC1 Blue start=sig, Lightning start=hk -->
-<div class="cell sig-row-alt"></div>
-<div class="cell sig-row-alt"><div class="block block-mid light"></div></div>
-<div class="cell sig-row-alt"><div class="block block-start light"><div class="hook sig">start</div></div></div>
-<div class="cell sig-row-alt"><div class="block block-mid video"></div></div>
-<div class="cell sig-row-alt"><div class="block block-start overlay"><div class="hook hk">start</div></div></div>
-<div class="cell sig-row-alt"><div class="block block-mid audio"></div></div>
-<!-- R12b: Storm fade in (within-track) -->
-<div class="cell"></div>
-<div class="cell"><div class="block block-mid light"></div></div>
-<div class="cell"><div class="block block-mid light"></div></div>
-<div class="cell"><div class="block block-mid video"></div></div>
-<div class="cell"><div class="block block-mid overlay"></div></div>
-<div class="cell"><div class="block block-mid audio"><div class="hook">fade in</div></div></div>
-<!-- R13: titles (SC1 Focus, SC1 Blue 80%, Sc1 Projection, Lightning Flash, Storm Ambience) -->
-<div class="cell"></div>
-<div class="cell"><div class="block block-mid light"><div class="title">SC1 Focus</div></div></div>
-<div class="cell"><div class="block block-mid light"><div class="title">SC1 Blue 80%</div></div></div>
-<div class="cell"><div class="block block-mid video"><div class="title">Sc1 Projection</div></div></div>
-<div class="cell"><div class="block block-mid overlay"><div class="title">Lightning Flash</div></div></div>
-<div class="cell"><div class="block block-mid audio"><div class="title">Storm Ambience</div></div></div>
-<!-- R15: Projection fade out=sig, Lightning end=hk -->
-<div class="cell sig-row"></div>
-<div class="cell sig-row"><div class="block block-mid light"></div></div>
-<div class="cell sig-row"><div class="block block-mid light"></div></div>
-<div class="cell sig-row"><div class="block block-mid video"><div class="hook sig">fade out</div></div></div>
-<div class="cell sig-row"><div class="block block-end overlay"><div class="hook hk">end</div></div></div>
-<div class="cell sig-row"><div class="block block-mid audio"></div></div>
-<!-- R16: Projection end, Wave Overlay start -->
-<div class="cell"></div>
-<div class="cell"><div class="block block-mid light"></div></div>
-<div class="cell"><div class="block block-mid light"></div></div>
-<div class="cell"><div class="block block-end video"><div class="hook">end</div></div></div>
-<div class="cell"><div class="block block-start overlay"><div class="hook">start</div></div></div>
-<div class="cell"><div class="block block-mid audio"></div></div>
-<!-- R17: Q13 GO=sig, SC1 Focus fade=hk, SC1 Blue fade=hk, Storm fade=hk -->
-<div class="cell cue-row"><div class="cue-label">Q13 Sc1 Dialog</div></div>
-<div class="cell cue-row"><div class="block block-mid light"><div class="hook">fade out</div></div></div>
-<div class="cell cue-row"><div class="block block-mid light"><div class="hook">fade out</div></div></div>
-<div class="cell cue-row"></div>
-<div class="cell cue-row"><div class="block block-mid overlay"></div></div>
-<div class="cell cue-row"><div class="block block-mid audio"><div class="hook">fade out</div></div></div>
-<!-- R18: SC1 Focus end -->
-<div class="cell"></div>
-<div class="cell"><div class="block block-end light"><div class="hook">end</div></div></div>
-<div class="cell"><div class="block block-mid light"></div></div>
-<div class="cell"></div>
-<div class="cell"><div class="block block-mid overlay"></div></div>
-<div class="cell"><div class="block block-mid audio"></div></div>
-<!-- R18b: Storm end=hk (completing fade from Q13) -->
-<div class="cell"></div>
-<div class="cell"></div>
-<div class="cell"><div class="block block-mid light"></div></div>
-<div class="cell"></div>
-<div class="cell"><div class="block block-mid overlay"></div></div>
-<div class="cell"><div class="block block-end audio"><div class="hook">end</div></div></div>
-<!-- R19: SC1 Blue end (within-track) -->
-<div class="cell"></div>
-<div class="cell"></div>
-<div class="cell"><div class="block block-end light"><div class="hook">end</div></div></div>
-<div class="cell"></div>
-<div class="cell"><div class="block block-mid overlay"></div></div>
-<div class="cell"></div>
-<!-- R19b: Dialog Underscore start=sig, Dialog Spots start=hk -->
-<div class="cell sig-row"></div>
-<div class="cell sig-row"><div class="block block-start light"><div class="hook hk">start</div></div></div>
-<div class="cell sig-row"></div>
-<div class="cell sig-row"></div>
-<div class="cell sig-row"><div class="block block-mid overlay"></div></div>
-<div class="cell sig-row"><div class="block block-start audio"><div class="hook sig">start</div></div></div>
-<!-- R20: Warm 90% start=hk -->
-<div class="cell"></div>
-<div class="cell"><div class="block block-mid light"></div></div>
-<div class="cell"><div class="block block-start light"><div class="hook">start</div></div></div>
-<div class="cell"></div>
-<div class="cell"><div class="block block-mid overlay"></div></div>
-<div class="cell"><div class="block block-mid audio"></div></div>
-<!-- R21: titles (Dialog Spots, Warm 90%, Wave Overlay, Dialog Underscore) -->
-<div class="cell"></div>
-<div class="cell"><div class="block block-mid light"><div class="title">Dialog Spots</div></div></div>
-<div class="cell"><div class="block block-mid light"><div class="title">Warm 90%</div></div></div>
-<div class="cell"></div>
-<div class="cell"><div class="block block-mid overlay"><div class="title">Wave Overlay</div></div></div>
-<div class="cell"><div class="block block-mid audio"><div class="title">Dialog Underscore</div></div></div>
-<!-- R22: Q14 GO=sig, Dialog Spots fade=hk, Warm 90% fade=hk, Sc2 Bg start=hk, Wave fade=hk, Dialog Underscore end=hk -->
-<div class="cell cue-row"><div class="cue-label">Q14 Sc2 Trans</div></div>
-<div class="cell cue-row"><div class="block block-mid light"><div class="hook">fade out</div></div></div>
-<div class="cell cue-row"><div class="block block-mid light"><div class="hook">fade out</div></div></div>
-<div class="cell cue-row"><div class="block block-start video"><div class="hook">start</div></div></div>
-<div class="cell cue-row"><div class="block block-mid overlay"><div class="hook">fade out</div></div></div>
-<div class="cell cue-row"><div class="block block-end audio"><div class="hook">end</div></div></div>
-<!-- R23: lighting ends (completing fades from Q14) -->
-<div class="cell"></div>
-<div class="cell"><div class="block block-end light"><div class="hook">end</div></div></div>
-<div class="cell"><div class="block block-end light"><div class="hook">end</div></div></div>
-<div class="cell"><div class="block block-mid video"></div></div>
-<div class="cell"><div class="block block-mid overlay"></div></div>
-<div class="cell"></div>
-<!-- R24: SC2 Focus start (within-track), SC2 Amber start (within-track) -->
-<div class="cell"></div>
-<div class="cell"><div class="block block-start light"><div class="hook">start</div></div></div>
-<div class="cell"><div class="block block-start light"><div class="hook">start</div></div></div>
-<div class="cell"><div class="block block-mid video"></div></div>
-<div class="cell"><div class="block block-mid overlay"></div></div>
-<div class="cell"></div>
-<!-- R25: Wave Overlay end=sig, SC2 Atmos start=hk -->
-<div class="cell sig-row"></div>
-<div class="cell sig-row"><div class="block block-mid light"></div></div>
-<div class="cell sig-row"><div class="block block-mid light"></div></div>
-<div class="cell sig-row"><div class="block block-mid video"></div></div>
-<div class="cell sig-row"><div class="block block-end overlay"><div class="hook sig">end</div></div></div>
-<div class="cell sig-row"><div class="block block-start audio"><div class="hook hk">start</div></div></div>
-<!-- R26: titles (SC2 Focus, SC2 Amber, Sc2 Background, SC2 Atmos) -->
-<div class="cell"></div>
-<div class="cell"><div class="block block-mid light"><div class="title">SC2 Focus</div></div></div>
-<div class="cell"><div class="block block-mid light"><div class="title">SC2 Amber 60%</div></div></div>
-<div class="cell"><div class="block block-mid video"><div class="title">Sc2 Background</div></div></div>
-<div class="cell"></div>
-<div class="cell"><div class="block block-mid audio"><div class="title">SC2 Atmos</div></div></div>
-<!-- R27: infinity -->
-<div class="cell"></div>
-<div class="cell infinity-cell"><div class="block block-mid light"></div><div class="infinity-marker">&#x223F;&#x223F;&#x223F;</div></div>
-<div class="cell infinity-cell"><div class="block block-mid light"></div><div class="infinity-marker">&#x223F;&#x223F;&#x223F;</div></div>
-<div class="cell infinity-cell"><div class="block block-mid video"></div><div class="infinity-marker">&#x223F;&#x223F;&#x223F;</div></div>
-<div class="cell"></div>
-<div class="cell infinity-cell"><div class="block block-mid audio"></div><div class="infinity-marker">&#x223F;&#x223F;&#x223F;</div></div>
-
+<div class="timeline" id="timeline"></div>
 </div>
 </div>
-</div>
+<script>
+fetch('show.json').then(r => r.json()).then(render);
+
+function render(data) {
+  const blockMap = new Map(data.blocks.map(b => [b.id, b]));
+  const trackIds = data.tracks.map(t => t.id);
+  const trackType = new Map(data.tracks.map(t => [t.id, t.type]));
+
+  const triggerTargetSet = new Set();
+  const triggerSourceSet = new Set();
+  data.triggers.forEach(t => {
+    triggerSourceSet.add(t.source);
+    t.targets.forEach(tgt => triggerTargetSet.add(tgt));
+  });
+
+  const trackBlocks = new Map();
+  trackIds.forEach(id => trackBlocks.set(id, []));
+  data.blocks.forEach(b => trackBlocks.get(b.track).push(b.id));
+
+  document.getElementById('header-status').innerHTML =
+    '<span><span class="status-dot"></span>QLab Connected</span>' +
+    '<span>Show: ' + data.show + '</span>' +
+    '<span>Cue: ' + data.blocks.filter(b => b.track === 'cue').length + '</span>';
+
+  const active = new Map();
+  const pendingEnds = new Set();
+  const pendingTitles = new Set();
+  const rows = [];
+  function btype(blockId) {
+    const b = blockMap.get(blockId);
+    return b.type || trackType.get(b.track);
+  }
+
+  function nextInTrack(blockId) {
+    const b = blockMap.get(blockId);
+    const seq = trackBlocks.get(b.track);
+    const idx = seq.indexOf(blockId);
+    return idx < seq.length - 1 ? seq[idx + 1] : null;
+  }
+
+  function mid(tid) {
+    const a = active.get(tid);
+    return a ? { blockId: a, segment: 'mid' } : { empty: true };
+  }
+
+  function addRow(cells, rowClass) {
+    rows.push({ cells, rowClass: rowClass || '' });
+  }
+
+  function canAutoStart(bid) {
+    const ref = bid + ':start';
+    return !triggerTargetSet.has(ref) && !triggerSourceSet.has(ref);
+  }
+
+  function emitTitles() {
+    if (pendingTitles.size === 0) return;
+    const cells = trackIds.map(tid => {
+      const t = [...pendingTitles].find(bid => blockMap.get(bid).track === tid);
+      return t ? { blockId: t, segment: 'mid', title: blockMap.get(t).name } : mid(tid);
+    });
+    addRow(cells);
+    pendingTitles.clear();
+  }
+
+  function doAutoStarts(ended) {
+    const starts = [];
+    ended.forEach(bid => {
+      const next = nextInTrack(bid);
+      if (next && canAutoStart(next)) starts.push(next);
+    });
+    if (starts.length === 0) return;
+    const cells = trackIds.map(tid => {
+      const s = starts.find(bid => blockMap.get(bid).track === tid);
+      if (s) {
+        active.set(tid, s);
+        pendingTitles.add(s);
+        return { blockId: s, segment: 'start', event: 'start' };
+      }
+      return mid(tid);
+    });
+    addRow(cells);
+  }
+
+  function flush(upcomingSource) {
+    emitTitles();
+    if (pendingEnds.size === 0) return;
+
+    const holdBack = new Set();
+    if (upcomingSource) {
+      for (const bid of pendingEnds) {
+        if (upcomingSource === bid + ':end') holdBack.add(bid);
+      }
+    }
+
+    const toEnd = [...pendingEnds].filter(bid => !holdBack.has(bid));
+    if (toEnd.length === 0) return;
+
+    const cells = trackIds.map(tid => {
+      const e = toEnd.find(bid => blockMap.get(bid).track === tid);
+      return e ? { blockId: e, segment: 'end', event: 'end' } : mid(tid);
+    });
+    addRow(cells);
+    toEnd.forEach(bid => { active.delete(blockMap.get(bid).track); pendingEnds.delete(bid); });
+
+    doAutoStarts(toEnd);
+    emitTitles();
+  }
+
+  function processTrigger(trigger) {
+    const source = trigger.source;
+    const isCue = !source.includes(':');
+
+    flush(source);
+
+    if (!isCue) {
+      const [srcBlock, srcEvent] = source.split(':');
+      const b = blockMap.get(srcBlock);
+      if (srcEvent === 'start') {
+        const cur = active.get(b.track);
+        if (cur && cur !== srcBlock) {
+          pendingEnds.delete(cur);
+          const cells = trackIds.map(tid =>
+            tid === b.track ? { blockId: cur, segment: 'end', event: 'end' } : mid(tid)
+          );
+          addRow(cells);
+          active.delete(b.track);
+        }
+        active.set(b.track, srcBlock);
+      }
+    }
+
+    emitTitles();
+
+    const rowClass = isCue ? 'cue-row' : 'sig-row';
+
+    const targetMap = new Map();
+    trigger.targets.forEach(t => {
+      const p = t.split(':');
+      targetMap.set(p[0], p[1]);
+    });
+
+    const directEnds = [];
+
+    const cells = trackIds.map(tid => {
+      if (isCue && tid === 'cue')
+        return { cueLabel: blockMap.get(source).name };
+
+      if (!isCue) {
+        const [srcBlock, srcEvent] = source.split(':');
+        if (blockMap.get(srcBlock).track === tid) {
+          const seg = srcEvent === 'start' ? 'start' : srcEvent === 'end' ? 'end' : 'mid';
+          return { blockId: srcBlock, segment: seg, event: srcEvent, isSignal: true };
+        }
+      }
+
+      const entry = [...targetMap.entries()].find(([bid]) => blockMap.get(bid).track === tid);
+      if (entry) {
+        const [bid, evt] = entry;
+        const isHook = !isCue;
+        if (evt === 'start') {
+          active.set(tid, bid);
+          pendingTitles.add(bid);
+          return { blockId: bid, segment: 'start', event: 'start', isHook };
+        }
+        if (evt === 'end') {
+          directEnds.push(bid);
+          return { blockId: bid, segment: 'end', event: 'end', isHook: isHook };
+        }
+        if (evt === 'fade_out') {
+          pendingEnds.add(bid);
+          return { blockId: bid, segment: 'mid', event: 'fade_out' };
+        }
+      }
+
+      return mid(tid);
+    });
+
+    addRow(cells, rowClass);
+
+    directEnds.forEach(bid => active.delete(blockMap.get(bid).track));
+    doAutoStarts(directEnds);
+
+    if (!isCue) {
+      const [srcBlock, srcEvent] = source.split(':');
+      if (srcEvent === 'start') pendingTitles.add(srcBlock);
+      if (srcEvent === 'fade_out') pendingEnds.add(srcBlock);
+      if (srcEvent === 'end') {
+        active.delete(blockMap.get(srcBlock).track);
+        pendingEnds.delete(srcBlock);
+        doAutoStarts([srcBlock]);
+      }
+    }
+  }
+
+  data.triggers.forEach(t => processTrigger(t));
+  flush(null);
+  emitTitles();
+
+  const infBlocks = data.blocks.filter(b => b.infinity);
+  if (infBlocks.length > 0) {
+    const cells = trackIds.map(tid => {
+      const inf = infBlocks.find(b => b.track === tid);
+      return inf ? { blockId: inf.id, segment: 'mid', infinity: true } : mid(tid);
+    });
+    addRow(cells);
+  }
+
+  const timeline = document.getElementById('timeline');
+  timeline.style.gridTemplateColumns = 'repeat(' + trackIds.length + ', 140px)';
+
+  data.tracks.forEach(t => {
+    const th = document.createElement('div');
+    th.className = 'track-header';
+    th.textContent = t.name;
+    timeline.appendChild(th);
+  });
+
+  rows.forEach(row => {
+    row.cells.forEach(cell => {
+      const div = document.createElement('div');
+      let cls = 'cell';
+      if (row.rowClass) cls += ' ' + row.rowClass;
+
+      if (cell.cueLabel) {
+        div.className = cls;
+        const label = document.createElement('div');
+        label.className = 'cue-label';
+        label.textContent = cell.cueLabel;
+        div.appendChild(label);
+      } else if (cell.empty) {
+        div.className = cls;
+      } else if (cell.title) {
+        div.className = cls;
+        const block = document.createElement('div');
+        block.className = 'block block-mid ' + btype(cell.blockId);
+        const t = document.createElement('div');
+        t.className = 'title';
+        t.textContent = cell.title;
+        block.appendChild(t);
+        div.appendChild(block);
+      } else if (cell.infinity) {
+        div.className = cls + ' infinity-cell';
+        const block = document.createElement('div');
+        block.className = 'block block-mid ' + btype(cell.blockId);
+        div.appendChild(block);
+        const marker = document.createElement('div');
+        marker.className = 'infinity-marker';
+        marker.innerHTML = '&#x223F;&#x223F;&#x223F;';
+        div.appendChild(marker);
+      } else {
+        div.className = cls;
+        const seg = cell.segment || 'mid';
+        const block = document.createElement('div');
+        block.className = 'block block-' + seg + ' ' + btype(cell.blockId);
+        if (cell.event) {
+          const hook = document.createElement('div');
+          let hookCls = 'hook';
+          if (cell.isSignal) hookCls += ' sig';
+          else if (cell.isHook) hookCls += ' hk';
+          hook.className = hookCls;
+          hook.textContent = cell.event.replace('_', ' ');
+          block.appendChild(hook);
+        }
+        div.appendChild(block);
+      }
+
+      timeline.appendChild(div);
+    });
+  });
+}
+</script>
 </body>
 </html>

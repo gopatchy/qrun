@@ -1,0 +1,50 @@
+{
+  "show": "The Tempest",
+  "currentCue": "q12",
+  "tracks": [
+    {"id": "cue", "name": "Cue", "type": "cue"},
+    {"id": "light-a", "name": "Lighting A", "type": "light"},
+    {"id": "light-b", "name": "Lighting B", "type": "light"},
+    {"id": "video", "name": "Video", "type": "video"},
+    {"id": "video-ovl", "name": "Video OVL", "type": "overlay"},
+    {"id": "audio", "name": "Audio", "type": "audio"}
+  ],
+  "blocks": [
+    {"id": "q10", "track": "cue", "name": "Q10 Preshow"},
+    {"id": "preshow-wash", "track": "light-a", "name": "Preshow Wash"},
+    {"id": "warm-70", "track": "light-b", "name": "Warm 70%"},
+    {"id": "preshow-loop", "track": "video", "name": "Preshow Loop"},
+    {"id": "preshow-music", "track": "audio", "name": "Preshow Music"},
+    {"id": "q11", "track": "cue", "name": "Q11 House Open"},
+    {"id": "q12", "track": "cue", "name": "Q12 Top of Show"},
+    {"id": "cool-50", "track": "light-b", "name": "Cool 50%"},
+    {"id": "delay-3s", "track": "video", "name": "3s Delay", "type": "delay"},
+    {"id": "sc1-focus", "track": "light-a", "name": "SC1 Focus"},
+    {"id": "sc1-blue", "track": "light-b", "name": "SC1 Blue 80%"},
+    {"id": "sc1-projection", "track": "video", "name": "Sc1 Projection"},
+    {"id": "lightning-flash", "track": "video-ovl", "name": "Lightning Flash"},
+    {"id": "storm-ambience", "track": "audio", "name": "Storm Ambience"},
+    {"id": "q13", "track": "cue", "name": "Q13 Sc1 Dialog"},
+    {"id": "wave-overlay", "track": "video-ovl", "name": "Wave Overlay"},
+    {"id": "dialog-spots", "track": "light-a", "name": "Dialog Spots"},
+    {"id": "warm-90", "track": "light-b", "name": "Warm 90%"},
+    {"id": "dialog-underscore", "track": "audio", "name": "Dialog Underscore"},
+    {"id": "q14", "track": "cue", "name": "Q14 Sc2 Trans"},
+    {"id": "sc2-focus", "track": "light-a", "name": "SC2 Focus", "infinity": true},
+    {"id": "sc2-amber", "track": "light-b", "name": "SC2 Amber 60%", "infinity": true},
+    {"id": "sc2-background", "track": "video", "name": "Sc2 Background", "infinity": true},
+    {"id": "sc2-atmos", "track": "audio", "name": "SC2 Atmos", "infinity": true}
+  ],
+  "triggers": [
+    {"source": "q10", "targets": ["preshow-wash:start", "warm-70:start", "preshow-loop:start", "preshow-music:start"]},
+    {"source": "q11", "targets": ["warm-70:fade_out"]},
+    {"source": "q12", "targets": ["preshow-wash:fade_out", "preshow-loop:fade_out", "preshow-music:fade_out"]},
+    {"source": "sc1-projection:start", "targets": ["sc1-focus:start", "cool-50:end", "storm-ambience:start"]},
+    {"source": "sc1-blue:start", "targets": ["lightning-flash:start"]},
+    {"source": "sc1-projection:fade_out", "targets": ["lightning-flash:end"]},
+    {"source": "q13", "targets": ["sc1-focus:fade_out", "sc1-blue:fade_out", "storm-ambience:fade_out", "wave-overlay:start"]},
+    {"source": "dialog-underscore:start", "targets": ["dialog-spots:start"]},
+    {"source": "q14", "targets": ["dialog-spots:fade_out", "warm-90:fade_out", "sc2-background:start", "wave-overlay:fade_out", "dialog-underscore:end"]},
+    {"source": "wave-overlay:end", "targets": ["sc2-atmos:start"]}
+  ]
+}

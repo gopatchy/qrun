@@ -20,10 +20,10 @@
     {"id": "block_01kht41b8deg8ae996tzqay0rg", "type": "light", "track": "track_01kht419m1e65bfgqzj28se459", "name": "SC1 Focus"},
     {"id": "block_01kht41b9neqf84ap7dm3mey9r", "type": "light", "track": "track_01kht419n7esr929mxvsacsy0k", "name": "SC1 Blue 80%"},
     {"id": "block_01kht41bawfbhr38a49tjvyahy", "type": "video", "track": "track_01kht419pbfx2992sjpagc0syy", "name": "Sc1 Projection"},
-    {"id": "block_01kht41bc3evybtn5hqnk6p2f7", "type": "overlay", "track": "track_01kht419qdeb1bjm9qe5acas2f", "name": "Lightning Flash"},
+    {"id": "block_01kht41bc3evybtn5hqnk6p2f7", "type": "video", "track": "track_01kht419qdeb1bjm9qe5acas2f", "name": "Lightning Flash"},
     {"id": "block_01kht41bdafggbbm8959svkm4n", "type": "audio", "track": "track_01kht419rffhnayzmgqnnkddtz", "name": "Storm Ambience", "loop": true},
     {"id": "block_01kht41bejev2997rfps2kpbat", "type": "cue", "name": "Q13 Sc1 Dialog"},
-    {"id": "block_01kht41bfsfhkvtvze4rh7k7z6", "type": "overlay", "track": "track_01kht419qdeb1bjm9qe5acas2f", "name": "Wave Overlay"},
+    {"id": "block_01kht41bfsfhkvtvze4rh7k7z6", "type": "video", "track": "track_01kht419qdeb1bjm9qe5acas2f", "name": "Wave Overlay"},
     {"id": "block_01kht41bgzfjcrkwrvrrjkqs0f", "type": "light", "track": "track_01kht419m1e65bfgqzj28se459", "name": "Dialog Spots"},
     {"id": "block_01kht41bj7ea89xn71nn5h400a", "type": "light", "track": "track_01kht419n7esr929mxvsacsy0k", "name": "Warm 90%"},
     {"id": "block_01kht41bkee1n81gnfq6bydmm2", "type": "audio", "track": "track_01kht419rffhnayzmgqnnkddtz", "name": "Dialog Underscore"},
@@ -50,6 +50,12 @@
       ]
     },
     {
+      "source": {"block": "block_01kht41azrenbaxyc2vebv7s4q", "signal": "END"},
+      "targets": [
+        {"block": "block_01kht41b5zf4ya2044tczm8tz6", "hook": "START"}
+      ]
+    },
+    {
       "source": {"block": "block_01kht41b4rfnhvk83p9afhp08y", "signal": "GO"},
       "targets": [
         {"block": "block_01kht41aygemwtrw590cet1en9", "hook": "FADE_OUT"},
@@ -58,11 +64,29 @@
       ]
     },
     {
+      "source": {"block": "block_01kht41b10emgt1gfvg7dy60ws", "signal": "END"},
+      "targets": [
+        {"block": "block_01kht41b76ebtraravpknavdm5", "hook": "START"}
+      ]
+    },
+    {
+      "source": {"block": "block_01kht41b76ebtraravpknavdm5", "signal": "END"},
+      "targets": [
+        {"block": "block_01kht41bawfbhr38a49tjvyahy", "hook": "START"}
+      ]
+    },
+    {
       "source": {"block": "block_01kht41bawfbhr38a49tjvyahy", "signal": "START"},
       "targets": [
         {"block": "block_01kht41b8deg8ae996tzqay0rg", "hook": "START"},
         {"block": "block_01kht41b5zf4ya2044tczm8tz6", "hook": "END"},
         {"block": "block_01kht41bdafggbbm8959svkm4n", "hook": "START"}
+      ]
+    },
+    {
+      "source": {"block": "block_01kht41b5zf4ya2044tczm8tz6", "signal": "END"},
+      "targets": [
+        {"block": "block_01kht41b9neqf84ap7dm3mey9r", "hook": "START"}
       ]
     },
     {
@@ -87,6 +111,18 @@
       ]
     },
     {
+      "source": {"block": "block_01kht41b9neqf84ap7dm3mey9r", "signal": "END"},
+      "targets": [
+        {"block": "block_01kht41bj7ea89xn71nn5h400a", "hook": "START"}
+      ]
+    },
+    {
+      "source": {"block": "block_01kht41bdafggbbm8959svkm4n", "signal": "END"},
+      "targets": [
+        {"block": "block_01kht41bkee1n81gnfq6bydmm2", "hook": "START"}
+      ]
+    },
+    {
       "source": {"block": "block_01kht41bkee1n81gnfq6bydmm2", "signal": "START"},
       "targets": [
         {"block": "block_01kht41bgzfjcrkwrvrrjkqs0f", "hook": "START"}
@@ -100,6 +136,18 @@
         {"block": "block_01kht41br4eajaj99tmey3eph0", "hook": "START"},
         {"block": "block_01kht41bfsfhkvtvze4rh7k7z6", "hook": "FADE_OUT"},
         {"block": "block_01kht41bkee1n81gnfq6bydmm2", "hook": "END"}
+      ]
+    },
+    {
+      "source": {"block": "block_01kht41bgzfjcrkwrvrrjkqs0f", "signal": "END"},
+      "targets": [
+        {"block": "block_01kht41bnxfme95cspptf87j9b", "hook": "START"}
+      ]
+    },
+    {
+      "source": {"block": "block_01kht41bj7ea89xn71nn5h400a", "signal": "END"},
+      "targets": [
+        {"block": "block_01kht41bq2ekwswsf51b0h1bd2", "hook": "START"}
       ]
     },
     {

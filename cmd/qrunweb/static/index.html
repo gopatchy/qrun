@@ -201,7 +201,26 @@ function render(data) {
   }
 
   function addRow(cells, rowClass) {
-    rows.push({ cells, rowClass: rowClass || '' });
+    rowClass = rowClass || '';
+    if (rows.length > 0) {
+      const last = rows[rows.length - 1];
+      if (last.rowClass === rowClass) {
+        let canMerge = true;
+        for (let i = 0; i < cells.length; i++) {
+          if ((cells[i].event || cells[i].cueLabel) && (last.cells[i].event || last.cells[i].cueLabel)) {
+            canMerge = false;
+            break;
+          }
+        }
+        if (canMerge) {
+          for (let i = 0; i < cells.length; i++) {
+            if (cells[i].event || cells[i].cueLabel) last.cells[i] = cells[i];
+          }
+          return;
+        }
+      }
+    }
+    rows.push({ cells, rowClass });
   }
 
   function flush() {
@@ -243,42 +262,57 @@ function render(data) {
     return null;
   }
 
-  function processTrigger(trigger) {
-    const src = trigger.source;
-    if (src.signal === 'START') return;
-    const isCue = src.signal === 'GO';
-
-    if (isChain(trigger)) {
-      const tid = blockTrack(src.block);
-      const tgt = trigger.targets[0].block;
-      const sourceHandled = active.get(tid) !== src.block && !pendingEnds.has(src.block);
-      if (!sourceHandled) flush();
-      if (active.get(tid) === src.block || pendingEnds.has(src.block)) {
-        pendingEnds.delete(src.block);
-        const endCells = trackIds.map(t =>
-          t === tid ? { blockId: src.block, segment: 'end', event: 'END' } : mid(t)
-        );
-        addRow(endCells);
+  function processChainBatch(chains) {
+    flush();
+    const chainEnds = [];
+    for (const trigger of chains) {
+      const src = trigger.source.block;
+      const tid = blockTrack(src);
+      if (active.get(tid) === src || pendingEnds.has(src)) {
+        pendingEnds.delete(src);
+        chainEnds.push({ block: src, track: tid });
         active.delete(tid);
       }
+    }
+    if (chainEnds.length > 0) {
+      const endCells = trackIds.map(t => {
+        const e = chainEnds.find(ce => ce.track === t);
+        return e ? { blockId: e.block, segment: 'end', event: 'END' } : mid(t);
+      });
+      addRow(endCells);
+    }
+    const chainStarts = new Map();
+    const combinedTargets = new Map();
+    for (const trigger of chains) {
+      const tgt = trigger.targets[0].block;
+      const tid = blockTrack(tgt);
       active.set(tid, tgt);
       const targetMap = new Map();
       const extras = startSignalMap.get(tgt);
       if (extras) extras.forEach(et => targetMap.set(et.block, et.hook));
       expandTargets(targetMap);
-      const hasTargets = targetMap.size > 0;
-      const directEnds = [];
-      noTitleAfter.add(rows.length - 1);
-      const startCells = trackIds.map(t => {
-        if (t === tid) return { blockId: tgt, segment: 'start', event: 'START', isSignal: hasTargets };
-        const cell = applyTargets(targetMap, t, false);
-        if (cell) { if (cell.directEnd) { directEnds.push(cell.blockId); delete cell.directEnd; } return cell; }
-        return mid(t);
-      });
-      addRow(startCells, hasTargets ? 'sig-row' : '');
-      directEnds.forEach(bid => active.delete(blockTrack(bid)));
-      return;
+      chainStarts.set(tid, { blockId: tgt, hasTargets: targetMap.size > 0 });
+      for (const [bid, hook] of targetMap) {
+        if (!combinedTargets.has(bid)) combinedTargets.set(bid, hook);
+      }
     }
+    const hasAnyTargets = [...chainStarts.values()].some(cs => cs.hasTargets);
+    noTitleAfter.add(rows.length - 1);
+    const directEnds = [];
+    const startCells = trackIds.map(t => {
+      const cs = chainStarts.get(t);
+      if (cs) return { blockId: cs.blockId, segment: 'start', event: 'START', isSignal: cs.hasTargets };
+      const cell = applyTargets(combinedTargets, t, false);
+      if (cell) { if (cell.directEnd) { directEnds.push(cell.blockId); delete cell.directEnd; } return cell; }
+      return mid(t);
+    });
+    addRow(startCells, hasAnyTargets ? 'sig-row' : '');
+    directEnds.forEach(bid => active.delete(blockTrack(bid)));
+  }
+
+  function processTrigger(trigger) {
+    const src = trigger.source;
+    const isCue = src.signal === 'GO';
 
     flush();
 
@@ -318,7 +352,35 @@ function render(data) {
     }
   }
 
-  data.triggers.forEach(t => processTrigger(t));
+  let triggerIdx = 0;
+  while (triggerIdx < data.triggers.length) {
+    const t = data.triggers[triggerIdx];
+    if (t.source.signal === 'START') { triggerIdx++; continue; }
+    if (isChain(t)) {
+      if (startSignalMap.has(t.targets[0].block)) {
+        processChainBatch([t]);
+        triggerIdx++;
+        continue;
+      }
+      const batch = [t];
+      const batchTracks = new Set([blockTrack(t.source.block)]);
+      let j = triggerIdx + 1;
+      while (j < data.triggers.length) {
+        if (data.triggers[j].source.signal === 'START') { j++; continue; }
+        if (!isChain(data.triggers[j])) break;
+        if (batchTracks.has(blockTrack(data.triggers[j].source.block))) break;
+        if (startSignalMap.has(data.triggers[j].targets[0].block)) break;
+        batchTracks.add(blockTrack(data.triggers[j].source.block));
+        batch.push(data.triggers[j]);
+        j++;
+      }
+      processChainBatch(batch);
+      triggerIdx = j;
+      continue;
+    }
+    processTrigger(t);
+    triggerIdx++;
+  }
   flush();
 
   const stillActive = [];

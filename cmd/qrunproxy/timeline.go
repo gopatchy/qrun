@@ -245,18 +245,15 @@ func (b *timelineBuilder) buildConstraints() {
 		}
 
 		if hasCrossTrack {
-			b.setSignal(sourceID)
+			b.trackCells[sourceID.track][sourceID.index].IsSignal = true
 		}
 		b.exclusives = append(b.exclusives, group)
 	}
 }
 
-func (b *timelineBuilder) setSignal(id cellID) {
-	b.trackCells[id.track][id.index].IsSignal = true
-}
 
 func (b *timelineBuilder) assignRows() {
-	for iter := 0; iter < 10000; iter++ {
+	for {
 		found := false
 		for _, c := range b.constraints {
 			aRow := b.rowOf(c.a)

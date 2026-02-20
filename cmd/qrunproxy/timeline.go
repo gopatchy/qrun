@@ -78,8 +78,6 @@ type timelineBuilder struct {
 	blocks    map[string]Block
 	tracks    []Track
 	trackIdx  map[string]int
-	startSigs map[string][]TriggerTarget
-
 	trackCells  [][]TimelineCell
 	constraints []constraint
 	exclusives  []exclusiveGroup
@@ -90,7 +88,6 @@ func newTimelineBuilder(show Show) *timelineBuilder {
 		show:      show,
 		blocks:    map[string]Block{},
 		trackIdx:  map[string]int{},
-		startSigs: map[string][]TriggerTarget{},
 	}
 
 	b.tracks = append(b.tracks, Track{ID: cueTrackID, Name: "Cue"})
@@ -104,11 +101,6 @@ func newTimelineBuilder(show Show) *timelineBuilder {
 			block.Track = cueTrackID
 		}
 		b.blocks[block.ID] = block
-	}
-	for _, trigger := range show.Triggers {
-		if trigger.Source.Signal == "START" {
-			b.startSigs[trigger.Source.Block] = append(b.startSigs[trigger.Source.Block], trigger.Targets...)
-		}
 	}
 
 	b.trackCells = make([][]TimelineCell, len(b.tracks))
@@ -197,17 +189,12 @@ func (b *timelineBuilder) buildCells() {
 
 func (b *timelineBuilder) buildConstraints() {
 	for _, trigger := range b.show.Triggers {
-		if trigger.Source.Signal == "START" {
-			continue
-		}
-
 		sourceID := b.findCell(trigger.Source.Block, trigger.Source.Signal)
 
 		group := exclusiveGroup{members: []cellID{sourceID}}
 		hasCrossTrack := false
 
-		allTargets := b.expandTargets(trigger.Targets)
-		for _, target := range allTargets {
+		for _, target := range trigger.Targets {
 			targetID := b.findCell(target.Block, target.Hook)
 			if sourceID.track == targetID.track {
 				b.addConstraint("next_row", sourceID, targetID)
@@ -223,28 +210,6 @@ func (b *timelineBuilder) buildConstraints() {
 		}
 		b.exclusives = append(b.exclusives, group)
 	}
-}
-
-func (b *timelineBuilder) expandTargets(targets []TriggerTarget) []TriggerTarget {
-	var result []TriggerTarget
-	seen := map[string]bool{}
-	queue := append([]TriggerTarget(nil), targets...)
-
-	for len(queue) > 0 {
-		target := queue[0]
-		queue = queue[1:]
-		if seen[target.Block] {
-			continue
-		}
-		seen[target.Block] = true
-		result = append(result, target)
-		if target.Hook == "START" {
-			if chained, has := b.startSigs[target.Block]; has {
-				queue = append(queue, chained...)
-			}
-		}
-	}
-	return result
 }
 
 func (b *timelineBuilder) setSignal(id cellID) {

@@ -55,6 +55,7 @@ type TimelineCell struct {
 	Event    string `json:"event,omitempty"`
 	IsTitle  bool   `json:"is_title,omitempty"`
 	IsSignal bool   `json:"is_signal,omitempty"`
+	IsGap    bool   `json:"-"`
 }
 
 type cellID struct {
@@ -72,24 +73,21 @@ type exclusiveGroup struct {
 	members []cellID
 }
 
-type trackCell struct {
-	cell  TimelineCell
-	isGap bool
-}
-
 type timelineBuilder struct {
+	show      Show
 	blocks    map[string]Block
-	tracks   []Track
-	trackIdx map[string]int
+	tracks    []Track
+	trackIdx  map[string]int
 	startSigs map[string][]TriggerTarget
 
-	trackCells  [][]trackCell
+	trackCells  [][]TimelineCell
 	constraints []constraint
 	exclusives  []exclusiveGroup
 }
 
-func BuildTimeline(show Show) (Timeline, error) {
+func newTimelineBuilder(show Show) *timelineBuilder {
 	b := &timelineBuilder{
+		show:      show,
 		blocks:    map[string]Block{},
 		trackIdx:  map[string]int{},
 		startSigs: map[string][]TriggerTarget{},
@@ -110,10 +108,16 @@ func BuildTimeline(show Show) (Timeline, error) {
 		}
 	}
 
-	b.trackCells = make([][]trackCell, len(b.tracks))
+	b.trackCells = make([][]TimelineCell, len(b.tracks))
 
-	b.buildCells(show)
+	return b
+}
 
+func BuildTimeline(show Show) (Timeline, error) {
+	b := newTimelineBuilder(show)
+
+	b.buildCells()
+	b.buildConstraints()
 	b.assignRows()
 
 	return Timeline{
@@ -121,16 +125,6 @@ func BuildTimeline(show Show) (Timeline, error) {
 		Blocks: b.blocks,
 		Rows:   b.renderRows(),
 	}, nil
-}
-
-func (b *timelineBuilder) appendCell(trackID string, cell TimelineCell) cellID {
-	idx, ok := b.trackIdx[trackID]
-	if !ok {
-		return cellID{-1, -1}
-	}
-	i := len(b.trackCells[idx])
-	b.trackCells[idx] = append(b.trackCells[idx], trackCell{cell: cell})
-	return cellID{track: idx, index: i}
 }
 
 func (b *timelineBuilder) addConstraint(kind string, a, b2 cellID) {
@@ -151,53 +145,64 @@ func (b *timelineBuilder) getTrack(blockID string) string {
 	return block.Track
 }
 
-type blockCells struct {
-	start   cellID
-	title   cellID
-	fadeOut cellID
-	end     cellID
+func getCueCells(block Block) []TimelineCell {
+	return []TimelineCell{{
+		BlockID: block.ID,
+		IsStart: true,
+		IsEnd:   true,
+		Event:   "GO",
+	}}
 }
 
-func (b *timelineBuilder) buildCells(show Show) {
-	cells := map[string]blockCells{}
+func getBlockCells(block Block) []TimelineCell {
+	return []TimelineCell{
+		{BlockID: block.ID, IsStart: true, Event: "START"},
+		{BlockID: block.ID, IsTitle: true},
+		{BlockID: block.ID, Event: "FADE_OUT"},
+		{BlockID: block.ID, IsEnd: true, Event: "END"},
+	}
+}
 
-	for _, block := range show.Blocks {
+func (b *timelineBuilder) findCell(blockID, event string) cellID {
+	trackID := b.getTrack(blockID)
+	if trackID == "" {
+		return cellID{-1, -1}
+	}
+	track := b.trackIdx[trackID]
+	for i, c := range b.trackCells[track] {
+		if !c.IsGap && c.BlockID == blockID && c.Event == event {
+			return cellID{track: track, index: i}
+		}
+	}
+	return cellID{-1, -1}
+}
+
+func (b *timelineBuilder) buildCells() {
+	for _, block := range b.show.Blocks {
 		trackID := b.getTrack(block.ID)
 		if trackID == "" {
 			continue
 		}
-		if block.Type == "cue" {
-			cueID := b.appendCell(trackID, TimelineCell{
-				BlockID: block.ID,
-				IsStart: true,
-				IsEnd:   true,
-				Event:   "GO",
-			})
-			cells[block.ID] = blockCells{start: cueID, title: cueID, fadeOut: cueID, end: cueID}
-			continue
+		idx := b.trackIdx[trackID]
+		var cells []TimelineCell
+		switch block.Type {
+		case "cue":
+			cells = getCueCells(block)
+		default:
+			cells = getBlockCells(block)
 		}
-		startID := b.appendCell(trackID, TimelineCell{BlockID: block.ID, IsStart: true, Event: "START"})
-		titleID := b.appendCell(trackID, TimelineCell{BlockID: block.ID, IsTitle: true})
-		fadeOutID := b.appendCell(trackID, TimelineCell{BlockID: block.ID, Event: "FADE_OUT"})
-		endID := b.appendCell(trackID, TimelineCell{BlockID: block.ID, IsEnd: true, Event: "END"})
-		cells[block.ID] = blockCells{start: startID, title: titleID, fadeOut: fadeOutID, end: endID}
+		b.trackCells[idx] = append(b.trackCells[idx], cells...)
 	}
+}
 
-	for _, trigger := range show.Triggers {
+func (b *timelineBuilder) buildConstraints() {
+	for _, trigger := range b.show.Triggers {
 		if trigger.Source.Signal == "START" {
 			continue
 		}
 
-		sourceCell := cells[trigger.Source.Block]
-		var sourceID cellID
-		switch trigger.Source.Signal {
-		case "GO":
-			sourceID = sourceCell.start
-		case "END":
-			sourceID = sourceCell.end
-		case "FADE_OUT":
-			sourceID = sourceCell.fadeOut
-		default:
+		sourceID := b.findCell(trigger.Source.Block, trigger.Source.Signal)
+		if sourceID.track < 0 {
 			continue
 		}
 
@@ -206,16 +211,8 @@ func (b *timelineBuilder) buildCells(show Show) {
 
 		allTargets := b.expandTargets(trigger.Targets)
 		for _, target := range allTargets {
-			tc := cells[target.Block]
-			var targetID cellID
-			switch target.Hook {
-			case "START":
-				targetID = tc.start
-			case "END":
-				targetID = tc.end
-			case "FADE_OUT":
-				targetID = tc.fadeOut
-			default:
+			targetID := b.findCell(target.Block, target.Hook)
+			if targetID.track < 0 {
 				continue
 			}
 			if sourceID.track == targetID.track {
@@ -232,7 +229,6 @@ func (b *timelineBuilder) buildCells(show Show) {
 		}
 		b.exclusives = append(b.exclusives, group)
 	}
-
 }
 
 func (b *timelineBuilder) expandTargets(targets []TriggerTarget) []TriggerTarget {
@@ -261,7 +257,7 @@ func (b *timelineBuilder) setSignal(id cellID) {
 	if id.track < 0 {
 		return
 	}
-	b.trackCells[id.track][id.index].cell.IsSignal = true
+	b.trackCells[id.track][id.index].IsSignal = true
 }
 
 func (b *timelineBuilder) assignRows() {
@@ -323,8 +319,8 @@ func (b *timelineBuilder) enforceExclusives() bool {
 			if row >= len(b.trackCells[trackIdx]) {
 				continue
 			}
-			tc := b.trackCells[trackIdx][row]
-			if tc.isGap || tc.cell.BlockID == "" {
+			c := b.trackCells[trackIdx][row]
+			if c.IsGap || c.BlockID == "" {
 				continue
 			}
 			b.insertGap(trackIdx, row)
@@ -340,9 +336,9 @@ func (b *timelineBuilder) rowOf(id cellID) int {
 
 func (b *timelineBuilder) insertGap(track, beforeIndex int) {
 	cells := b.trackCells[track]
-	newCells := make([]trackCell, 0, len(cells)+1)
+	newCells := make([]TimelineCell, 0, len(cells)+1)
 	newCells = append(newCells, cells[:beforeIndex]...)
-	newCells = append(newCells, trackCell{isGap: true})
+	newCells = append(newCells, TimelineCell{IsGap: true})
 	newCells = append(newCells, cells[beforeIndex:]...)
 	b.trackCells[track] = newCells
 
@@ -382,16 +378,16 @@ func (b *timelineBuilder) renderRows() []TimelineRow {
 		activeBlock := ""
 		for r := 0; r < maxLen; r++ {
 			if r < len(cells) {
-				tc := cells[r]
-				if tc.isGap {
+				c := cells[r]
+				if c.IsGap {
 					if activeBlock != "" {
 						rows[r].Cells[trackIdx] = TimelineCell{BlockID: activeBlock}
 					}
 				} else {
-					rows[r].Cells[trackIdx] = tc.cell
-					if tc.cell.BlockID != "" && !tc.cell.IsEnd {
-						activeBlock = tc.cell.BlockID
-					} else if tc.cell.IsEnd {
+					rows[r].Cells[trackIdx] = c
+					if c.BlockID != "" && !c.IsEnd {
+						activeBlock = c.BlockID
+					} else if c.IsEnd {
 						activeBlock = ""
 					}
 				}

@@ -164,7 +164,10 @@ function render(data) {
     `<span><span class="status-dot"></span>QLab Connected</span>`;
 
   const timeline = document.getElementById('timeline');
-  timeline.style.gridTemplateColumns = `repeat(${data.tracks.length}, 140px)`;
+  const numTracks = data.tracks.length;
+  const numRows = Math.max(...data.tracks.map(t => t.cells.length));
+  timeline.style.gridTemplateColumns = `repeat(${numTracks}, 140px)`;
+
   data.tracks.forEach(track => {
     const el = document.createElement('div');
     el.className = 'track-header';
@@ -172,12 +175,13 @@ function render(data) {
     timeline.appendChild(el);
   });
 
-  data.rows.forEach((row, rowIndex) => {
-    const hasCue = row.cells.some(c => c.block_id && c.event && (data.blocks[c.block_id] || {}).type === 'cue');
-    const hasSignal = !hasCue && row.cells.some(c => c.event && c.is_signal);
+  for (let r = 0; r < numRows; r++) {
+    const cells = data.tracks.map(t => t.cells[r] || {});
+    const hasCue = cells.some(c => c.block_id && c.event && (data.blocks[c.block_id] || {}).type === 'cue');
+    const hasSignal = !hasCue && cells.some(c => c.event && c.is_signal);
     const rowCls = hasCue ? ' cue-row' : (hasSignal ? ' sig-row' : '');
 
-    row.cells.forEach(c => {
+    cells.forEach(c => {
       const div = document.createElement('div');
       div.className = 'cell' + rowCls;
       if (c.is_title) {
@@ -185,7 +189,7 @@ function render(data) {
         div.innerHTML = `<div class="block block-mid ${block.type || ''}"><div class="title">${block.name || ''}</div></div>`;
       } else if (c.block_id) {
         const block = data.blocks[c.block_id] || {};
-        const isInfinity = rowIndex === data.rows.length - 1 && !c.is_end && !c.is_title;
+        const isInfinity = r === numRows - 1 && !c.is_end && !c.is_title;
         let seg = 'mid';
         if (c.is_start && c.is_end) seg = 'single';
         else if (c.is_start) seg = 'start';
@@ -206,7 +210,7 @@ function render(data) {
       }
       timeline.appendChild(div);
     });
-  });
+  }
 }
 </script>
 </body>

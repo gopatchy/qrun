@@ -40,14 +40,14 @@ type TriggerTarget struct {
 	Hook  string `json:"hook"`
 }
 
-type Timeline struct {
-	Tracks []Track          `json:"tracks"`
-	Blocks map[string]Block `json:"blocks"`
-	Rows   []TimelineRow    `json:"rows"`
+type TimelineTrack struct {
+	Track
+	Cells []TimelineCell `json:"cells"`
 }
 
-type TimelineRow struct {
-	Cells []TimelineCell `json:"cells"`
+type Timeline struct {
+	Tracks []TimelineTrack `json:"tracks"`
+	Blocks map[string]Block `json:"blocks"`
 }
 
 type TimelineCell struct {
@@ -150,10 +150,14 @@ func BuildTimeline(show Show) (Timeline, error) {
 	b.assignRows()
 	b.collapseEmptyRows()
 
+	tracks := make([]TimelineTrack, len(b.tracks))
+	for i, t := range b.tracks {
+		tracks[i] = TimelineTrack{Track: t, Cells: b.trackCells[i]}
+	}
+
 	return Timeline{
-		Tracks: b.tracks,
+		Tracks: tracks,
 		Blocks: b.blocks,
-		Rows:   b.renderRows(),
 	}, nil
 }
 
@@ -340,10 +344,22 @@ func (b *timelineBuilder) insertGap(track, beforeIndex int) {
 		}
 	}
 
+	gap := TimelineCell{IsGap: true}
+	for i := beforeIndex - 1; i >= 0; i-- {
+		c := b.trackCells[track][i]
+		if c.IsGap {
+			continue
+		}
+		if c.BlockID != "" && !c.IsEnd {
+			gap.BlockID = c.BlockID
+		}
+		break
+	}
+
 	cells := b.trackCells[track]
 	newCells := make([]TimelineCell, 0, len(cells)+1)
 	newCells = append(newCells, cells[:beforeIndex]...)
-	newCells = append(newCells, TimelineCell{IsGap: true})
+	newCells = append(newCells, gap)
 	newCells = append(newCells, cells[beforeIndex:]...)
 	b.trackCells[track] = newCells
 
@@ -435,41 +451,3 @@ func (b *timelineBuilder) collapseEmptyRows() {
 	}
 }
 
-func (b *timelineBuilder) renderRows() []TimelineRow {
-	maxLen := 0
-	for _, cells := range b.trackCells {
-		if len(cells) > maxLen {
-			maxLen = len(cells)
-		}
-	}
-
-	rows := make([]TimelineRow, maxLen)
-	for r := range rows {
-		rows[r].Cells = make([]TimelineCell, len(b.tracks))
-	}
-
-	for trackIdx, cells := range b.trackCells {
-		activeBlock := ""
-		for r := 0; r < maxLen; r++ {
-			if r < len(cells) {
-				c := cells[r]
-				if c.IsGap {
-					if activeBlock != "" {
-						rows[r].Cells[trackIdx] = TimelineCell{BlockID: activeBlock}
-					}
-				} else {
-					rows[r].Cells[trackIdx] = c
-					if c.BlockID != "" && !c.IsEnd {
-						activeBlock = c.BlockID
-					} else if c.IsEnd {
-						activeBlock = ""
-					}
-				}
-			} else if activeBlock != "" {
-				rows[r].Cells[trackIdx] = TimelineCell{BlockID: activeBlock}
-			}
-		}
-	}
-
-	return rows
-}

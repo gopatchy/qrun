@@ -1,0 +1,216 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Qrun</title>
+<style>
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+:root {
+  --bg: #111;
+  --bg2: #1a1a1a;
+  --fg: #eee;
+  --fg-dim: #888;
+  --border: #333;
+  --cue-color: #f72;
+  --cue-bg: rgba(58, 24, 0, 0.7);
+  --light-color: #c8e;
+  --light-bg: rgba(42, 10, 42, 0.55);
+  --video-color: #4d4;
+  --video-bg: rgba(10, 42, 10, 0.55);
+  --audio-color: #58f;
+  --audio-bg: rgba(10, 10, 42, 0.55);
+  --delay-color: #999;
+  --delay-bg: rgba(26, 26, 26, 0.55);
+  --infinity-color: #666;
+}
+
+html, body {
+  background: var(--bg);
+  color: var(--fg);
+  font-family: "SF Mono", "Menlo", "Consolas", "DejaVu Sans Mono", monospace;
+  font-size: 13px;
+  line-height: 1.4;
+  height: 100%;
+  overflow: hidden;
+}
+
+.app { display: flex; flex-direction: column; height: 100%; }
+
+header {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 8px 16px; background: var(--bg2);
+  border-bottom: 1px solid var(--border); flex-shrink: 0;
+}
+header h1 { font-size: 16px; font-weight: 600; letter-spacing: 0.05em; }
+.header-status { display: flex; gap: 16px; align-items: center; font-size: 12px; color: var(--fg-dim); }
+.status-dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; background: #4d4; margin-right: 4px; }
+
+.timeline-container { flex: 1; overflow: auto; }
+
+.timeline {
+  display: grid;
+  grid-auto-rows: 24px;
+}
+
+.track-header {
+  position: sticky; top: 0; z-index: 10;
+  padding: 6px 8px; font-size: 10px; font-weight: 600;
+  text-transform: uppercase; letter-spacing: 0.08em; text-align: center;
+  border-bottom: 2px solid var(--border); border-right: 1px solid var(--border);
+  background: var(--bg2); color: var(--fg-dim);
+}
+
+.cell {
+  border-right: 1px solid var(--border);
+  border-bottom: 1px solid var(--border);
+  padding: 0; position: relative;
+  display: flex; flex-direction: column;
+  justify-content: center;
+}
+
+.block {
+  margin: 0 3px; position: relative; z-index: 1; flex: 1;
+  display: flex; align-items: center; justify-content: center;
+}
+.block-start {
+  border-top: 2px solid; border-left: 2px solid; border-right: 2px solid;
+  border-top-left-radius: 3px; border-top-right-radius: 3px;
+  margin-top: 1px; margin-bottom: -1px;
+}
+.block-mid {
+  border-left: 2px solid; border-right: 2px solid;
+  margin-top: -1px; margin-bottom: -1px; min-height: 4px;
+}
+.block-end {
+  border-bottom: 2px solid; border-left: 2px solid; border-right: 2px solid;
+  border-bottom-left-radius: 3px; border-bottom-right-radius: 3px;
+  margin-top: -1px; margin-bottom: 1px;
+}
+.block-single {
+  border: 2px solid; border-radius: 3px; margin: 1px 3px;
+}
+
+.block.cue { color: var(--cue-color); border-color: var(--cue-color); background: var(--cue-bg); }
+
+.cell.cue-row {
+  background: rgba(255, 119, 34, 0.12);
+  border-top: 1px solid var(--cue-color);
+  border-bottom: 1px solid var(--cue-color);
+}
+
+.cell.sig-row {
+  background: rgba(255, 204, 0, 0.07);
+  border-top: 1px solid rgba(255, 204, 0, 0.3);
+  border-bottom: 1px solid rgba(255, 204, 0, 0.3);
+}
+.block.light { color: var(--light-color); border-color: var(--light-color); background: var(--light-bg); }
+.block.video { color: var(--video-color); border-color: var(--video-color); background: var(--video-bg); }
+.block.audio { color: var(--audio-color); border-color: var(--audio-color); background: var(--audio-bg); }
+.block.delay { color: var(--delay-color); border-color: var(--delay-color); background: var(--delay-bg); }
+
+.hook {
+  font-size: 8px; font-weight: 600; text-transform: uppercase;
+  letter-spacing: 0.06em; opacity: 0.8;
+}
+
+.sig {
+  background: #fc0;
+  color: #000;
+  border-radius: 2px;
+  padding: 0 6px;
+  font-weight: 700;
+}
+
+.hk {
+  padding: 0 5px;
+}
+
+.title {
+  text-align: center; font-size: 11px; font-weight: 500;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+
+.cue-label {
+  font-size: 10px; font-weight: 600; color: var(--cue-color);
+  padding: 0 4px;
+}
+
+.infinity-cell { position: relative; overflow: hidden; }
+.infinity-cell .block { border-bottom: none !important; border-bottom-left-radius: 0 !important; border-bottom-right-radius: 0 !important; }
+.infinity-marker {
+  position: absolute; bottom: 2px; left: 50%; transform: translateX(-50%);
+  font-size: 9px; color: var(--infinity-color);
+  letter-spacing: 0.1em; z-index: 1; white-space: nowrap;
+}
+</style>
+</head>
+<body>
+<div class="app">
+<header>
+  <h1>QRUN</h1>
+  <div class="header-status" id="header-status"></div>
+</header>
+<div class="timeline-container">
+<div class="timeline" id="timeline"></div>
+</div>
+</div>
+<script>
+fetch('/api/timeline').then(r => r.json()).then(render).catch(err => {
+  const status = document.getElementById('header-status');
+  status.textContent = `Error loading timeline: ${err}`;
+});
+
+function render(data) {
+  document.getElementById('header-status').innerHTML =
+    `<span><span class="status-dot"></span>QLab Connected</span>`;
+
+  const timeline = document.getElementById('timeline');
+  timeline.style.gridTemplateColumns = `repeat(${data.tracks.length}, 140px)`;
+  data.tracks.forEach(track => {
+    const el = document.createElement('div');
+    el.className = 'track-header';
+    el.textContent = track.name || '';
+    timeline.appendChild(el);
+  });
+
+  data.rows.forEach((row, rowIndex) => {
+    const hasCue = row.cells.some(c => c.block_id && c.event && (data.blocks[c.block_id] || {}).type === 'cue');
+    const hasSignal = !hasCue && row.cells.some(c => c.event && c.is_signal);
+    const rowCls = hasCue ? ' cue-row' : (hasSignal ? ' sig-row' : '');
+
+    row.cells.forEach(c => {
+      const div = document.createElement('div');
+      div.className = 'cell' + rowCls;
+      if (c.is_title) {
+        const block = data.blocks[c.block_id] || {};
+        div.innerHTML = `<div class="block block-mid ${block.type || ''}"><div class="title">${block.name || ''}</div></div>`;
+      } else if (c.block_id) {
+        const block = data.blocks[c.block_id] || {};
+        const isInfinity = rowIndex === data.rows.length - 1 && !c.is_end && !c.is_title;
+        let seg = 'mid';
+        if (c.is_start && c.is_end) seg = 'single';
+        else if (c.is_start) seg = 'start';
+        else if (c.is_end) seg = 'end';
+
+        div.className += isInfinity ? ' infinity-cell' : '';
+        let inner = `<div class="block block-${seg} ${block.type || ''}">`;
+        if (block.type === 'cue') {
+          inner += `<div class="cue-label">${block.name || ''}</div>`;
+        } else if (c.event) {
+          let hCls = 'hook';
+          if (c.is_signal) hCls += ' sig';
+          inner += `<div class="${hCls}">${c.event.replace('_', ' ')}</div>`;
+        }
+        inner += `</div>`;
+        if (isInfinity) inner += `<div class="infinity-marker">&#x223F;&#x223F;&#x223F;</div>`;
+        div.innerHTML = inner;
+      }
+      timeline.appendChild(div);
+    });
+  });
+}
+</script>
+</body>
+</html>

@@ -1,0 +1,159 @@
+{
+  "tracks": [
+    {"id": "track_01kht419m1e65bfgqzj28se459", "name": "Lighting A"},
+    {"id": "track_01kht419n7esr929mxvsacsy0k", "name": "Lighting B"},
+    {"id": "track_01kht419pbfx2992sjpagc0syy", "name": "Video"},
+    {"id": "track_01kht419qdeb1bjm9qe5acas2f", "name": "Video OVL"},
+    {"id": "track_01kht419rffhnayzmgqnnkddtz", "name": "Audio"}
+  ],
+  "blocks": [
+    {"id": "block_01kht41ax6f0ntbmqc5jxfda2m", "type": "cue", "name": "Q10 Preshow"},
+    {"id": "block_01kht41aygemwtrw590cet1en9", "type": "light", "track": "track_01kht419m1e65bfgqzj28se459", "name": "Preshow Wash"},
+    {"id": "block_01kht41azrenbaxyc2vebv7s4q", "type": "light", "track": "track_01kht419n7esr929mxvsacsy0k", "name": "Warm 70%"},
+    {"id": "block_01kht41b10emgt1gfvg7dy60ws", "type": "video", "track": "track_01kht419pbfx2992sjpagc0syy", "name": "Preshow Loop", "loop": true},
+    {"id": "block_01kht41b29eyes3b6neh4h56mn", "type": "audio", "track": "track_01kht419rffhnayzmgqnnkddtz", "name": "Preshow Music", "loop": true},
+    {"id": "block_01kht41b3ge6ntqwjqrjq4wsxm", "type": "cue", "name": "Q11 House Open"},
+    {"id": "block_01kht41b4rfnhvk83p9afhp08y", "type": "cue", "name": "Q12 Top of Show"},
+    {"id": "block_01kht41b5zf4ya2044tczm8tz6", "type": "light", "track": "track_01kht419n7esr929mxvsacsy0k", "name": "Cool 50%"},
+    {"id": "block_01kht41b76ebtraravpknavdm5", "type": "delay", "track": "track_01kht419pbfx2992sjpagc0syy", "name": "3s Delay"},
+    {"id": "block_01kht41b8deg8ae996tzqay0rg", "type": "light", "track": "track_01kht419m1e65bfgqzj28se459", "name": "SC1 Focus"},
+    {"id": "block_01kht41b9neqf84ap7dm3mey9r", "type": "light", "track": "track_01kht419n7esr929mxvsacsy0k", "name": "SC1 Blue 80%"},
+    {"id": "block_01kht41bawfbhr38a49tjvyahy", "type": "video", "track": "track_01kht419pbfx2992sjpagc0syy", "name": "Sc1 Projection"},
+    {"id": "block_01kht41bc3evybtn5hqnk6p2f7", "type": "video", "track": "track_01kht419qdeb1bjm9qe5acas2f", "name": "Lightning Flash"},
+    {"id": "block_01kht41bdafggbbm8959svkm4n", "type": "audio", "track": "track_01kht419rffhnayzmgqnnkddtz", "name": "Storm Ambience", "loop": true},
+    {"id": "block_01kht41bejev2997rfps2kpbat", "type": "cue", "name": "Q13 Sc1 Dialog"},
+    {"id": "block_01kht41bfsfhkvtvze4rh7k7z6", "type": "video", "track": "track_01kht419qdeb1bjm9qe5acas2f", "name": "Wave Overlay"},
+    {"id": "block_01kht41bgzfjcrkwrvrrjkqs0f", "type": "light", "track": "track_01kht419m1e65bfgqzj28se459", "name": "Dialog Spots"},
+    {"id": "block_01kht41bj7ea89xn71nn5h400a", "type": "light", "track": "track_01kht419n7esr929mxvsacsy0k", "name": "Warm 90%"},
+    {"id": "block_01kht41bkee1n81gnfq6bydmm2", "type": "audio", "track": "track_01kht419rffhnayzmgqnnkddtz", "name": "Dialog Underscore"},
+    {"id": "block_01kht41bmnfdbvfr4d08brj19k", "type": "cue", "name": "Q14 Sc2 Trans"},
+    {"id": "block_01kht41bnxfme95cspptf87j9b", "type": "light", "track": "track_01kht419m1e65bfgqzj28se459", "name": "SC2 Focus"},
+    {"id": "block_01kht41bq2ekwswsf51b0h1bd2", "type": "light", "track": "track_01kht419n7esr929mxvsacsy0k", "name": "SC2 Amber 60%"},
+    {"id": "block_01kht41br4eajaj99tmey3eph0", "type": "video", "track": "track_01kht419pbfx2992sjpagc0syy", "name": "Sc2 Background", "loop": true},
+    {"id": "block_01kht41bs5fxrr0a7mznd026v4", "type": "audio", "track": "track_01kht419rffhnayzmgqnnkddtz", "name": "SC2 Atmos", "loop": true}
+  ],
+  "triggers": [
+    {
+      "source": {"block": "block_01kht41ax6f0ntbmqc5jxfda2m", "signal": "GO"},
+      "targets": [
+        {"block": "block_01kht41aygemwtrw590cet1en9", "hook": "START"},
+        {"block": "block_01kht41azrenbaxyc2vebv7s4q", "hook": "START"},
+        {"block": "block_01kht41b10emgt1gfvg7dy60ws", "hook": "START"},
+        {"block": "block_01kht41b29eyes3b6neh4h56mn", "hook": "START"}
+      ]
+    },
+    {
+      "source": {"block": "block_01kht41b3ge6ntqwjqrjq4wsxm", "signal": "GO"},
+      "targets": [
+        {"block": "block_01kht41azrenbaxyc2vebv7s4q", "hook": "FADE_OUT"}
+      ]
+    },
+    {
+      "source": {"block": "block_01kht41azrenbaxyc2vebv7s4q", "signal": "END"},
+      "targets": [
+        {"block": "block_01kht41b5zf4ya2044tczm8tz6", "hook": "START"}
+      ]
+    },
+    {
+      "source": {"block": "block_01kht41b4rfnhvk83p9afhp08y", "signal": "GO"},
+      "targets": [
+        {"block": "block_01kht41aygemwtrw590cet1en9", "hook": "FADE_OUT"},
+        {"block": "block_01kht41b10emgt1gfvg7dy60ws", "hook": "FADE_OUT"},
+        {"block": "block_01kht41b29eyes3b6neh4h56mn", "hook": "FADE_OUT"}
+      ]
+    },
+    {
+      "source": {"block": "block_01kht41b10emgt1gfvg7dy60ws", "signal": "END"},
+      "targets": [
+        {"block": "block_01kht41b76ebtraravpknavdm5", "hook": "START"}
+      ]
+    },
+    {
+      "source": {"block": "block_01kht41b76ebtraravpknavdm5", "signal": "END"},
+      "targets": [
+        {"block": "block_01kht41bawfbhr38a49tjvyahy", "hook": "START"}
+      ]
+    },
+    {
+      "source": {"block": "block_01kht41bawfbhr38a49tjvyahy", "signal": "START"},
+      "targets": [
+        {"block": "block_01kht41b8deg8ae996tzqay0rg", "hook": "START"},
+        {"block": "block_01kht41b5zf4ya2044tczm8tz6", "hook": "END"},
+        {"block": "block_01kht41bdafggbbm8959svkm4n", "hook": "START"}
+      ]
+    },
+    {
+      "source": {"block": "block_01kht41b5zf4ya2044tczm8tz6", "signal": "END"},
+      "targets": [
+        {"block": "block_01kht41b9neqf84ap7dm3mey9r", "hook": "START"}
+      ]
+    },
+    {
+      "source": {"block": "block_01kht41b9neqf84ap7dm3mey9r", "signal": "START"},
+      "targets": [
+        {"block": "block_01kht41bc3evybtn5hqnk6p2f7", "hook": "START"}
+      ]
+    },
+    {
+      "source": {"block": "block_01kht41bawfbhr38a49tjvyahy", "signal": "FADE_OUT"},
+      "targets": [
+        {"block": "block_01kht41bc3evybtn5hqnk6p2f7", "hook": "END"}
+      ]
+    },
+    {
+      "source": {"block": "block_01kht41bejev2997rfps2kpbat", "signal": "GO"},
+      "targets": [
+        {"block": "block_01kht41b8deg8ae996tzqay0rg", "hook": "FADE_OUT"},
+        {"block": "block_01kht41b9neqf84ap7dm3mey9r", "hook": "FADE_OUT"},
+        {"block": "block_01kht41bdafggbbm8959svkm4n", "hook": "FADE_OUT"},
+        {"block": "block_01kht41bfsfhkvtvze4rh7k7z6", "hook": "START"}
+      ]
+    },
+    {
+      "source": {"block": "block_01kht41b9neqf84ap7dm3mey9r", "signal": "END"},
+      "targets": [
+        {"block": "block_01kht41bj7ea89xn71nn5h400a", "hook": "START"}
+      ]
+    },
+    {
+      "source": {"block": "block_01kht41bdafggbbm8959svkm4n", "signal": "END"},
+      "targets": [
+        {"block": "block_01kht41bkee1n81gnfq6bydmm2", "hook": "START"}
+      ]
+    },
+    {
+      "source": {"block": "block_01kht41bkee1n81gnfq6bydmm2", "signal": "START"},
+      "targets": [
+        {"block": "block_01kht41bgzfjcrkwrvrrjkqs0f", "hook": "START"}
+      ]
+    },
+    {
+      "source": {"block": "block_01kht41bmnfdbvfr4d08brj19k", "signal": "GO"},
+      "targets": [
+        {"block": "block_01kht41bgzfjcrkwrvrrjkqs0f", "hook": "FADE_OUT"},
+        {"block": "block_01kht41bj7ea89xn71nn5h400a", "hook": "FADE_OUT"},
+        {"block": "block_01kht41br4eajaj99tmey3eph0", "hook": "START"},
+        {"block": "block_01kht41bfsfhkvtvze4rh7k7z6", "hook": "FADE_OUT"},
+        {"block": "block_01kht41bkee1n81gnfq6bydmm2", "hook": "END"}
+      ]
+    },
+    {
+      "source": {"block": "block_01kht41bgzfjcrkwrvrrjkqs0f", "signal": "END"},
+      "targets": [
+        {"block": "block_01kht41bnxfme95cspptf87j9b", "hook": "START"}
+      ]
+    },
+    {
+      "source": {"block": "block_01kht41bj7ea89xn71nn5h400a", "signal": "END"},
+      "targets": [
+        {"block": "block_01kht41bq2ekwswsf51b0h1bd2", "hook": "START"}
+      ]
+    },
+    {
+      "source": {"block": "block_01kht41bfsfhkvtvze4rh7k7z6", "signal": "END"},
+      "targets": [
+        {"block": "block_01kht41bs5fxrr0a7mznd026v4", "hook": "START"}
+      ]
+    }
+  ]
+}

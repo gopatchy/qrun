@@ -20,6 +20,7 @@ var staticFS embed.FS
 func main() {
 	addr := flag.String("addr", ":8080", "listen address")
 	runAndExitStr := flag.String("run-and-exit", "", "command to run after server starts, then exit")
+	printTimeline := flag.Bool("print-timeline-and-exit", false, "print timeline JSON and exit")
 	flag.Parse()
 
 	var runAndExit []string
@@ -37,6 +38,16 @@ func main() {
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "Error building timeline: %v\n", err)
 		os.Exit(1)
+	}
+
+	if *printTimeline {
+		enc := json.NewEncoder(os.Stdout)
+		enc.SetIndent("", "  ")
+		if err := enc.Encode(timeline); err != nil {
+			fmt.Fprintf(os.Stderr, "Error: %v\n", err)
+			os.Exit(1)
+		}
+		return
 	}
 
 	sub, err := fs.Sub(staticFS, "static")

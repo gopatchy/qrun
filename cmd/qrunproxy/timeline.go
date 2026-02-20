@@ -126,7 +126,20 @@ func BuildTimeline(show Show) (Timeline, error) {
 		tl.Blocks[block.ID] = block
 	}
 
-	tl.buildCells()
+	endChains := map[string]bool{}
+	for _, trigger := range show.Triggers {
+		if trigger.Source.Signal != "END" {
+			continue
+		}
+		srcTrack := tl.Blocks[trigger.Source.Block].Track
+		for _, target := range trigger.Targets {
+			if target.Hook == "START" && tl.Blocks[target.Block].Track == srcTrack {
+				endChains[trigger.Source.Block] = true
+			}
+		}
+	}
+
+	tl.buildCells(endChains)
 	tl.buildConstraints()
 	tl.assignRows()
 
@@ -173,22 +186,7 @@ func (tl *Timeline) findCell(blockID, event string) *TimelineCell {
 	panic("cell not found: " + blockID + " " + event)
 }
 
-func (tl *Timeline) endChainsSameTrack(blockID string) bool {
-	trackID := tl.Blocks[blockID].Track
-	for _, trigger := range tl.show.Triggers {
-		if trigger.Source.Block != blockID || trigger.Source.Signal != "END" {
-			continue
-		}
-		for _, target := range trigger.Targets {
-			if target.Hook == "START" && tl.Blocks[target.Block].Track == trackID {
-				return true
-			}
-		}
-	}
-	return false
-}
-
-func (tl *Timeline) buildCells() {
+func (tl *Timeline) buildCells(endChains map[string]bool) {
 	for _, sb := range tl.show.Blocks {
 		block := tl.Blocks[sb.ID]
 		track := tl.trackIdx[block.Track]
@@ -200,7 +198,7 @@ func (tl *Timeline) buildCells() {
 			cells = getBlockCells(block)
 		}
 		track.appendCells(cells...)
-		if block.Type != "cue" && !tl.endChainsSameTrack(block.ID) {
+		if block.Type != "cue" && !endChains[block.ID] {
 			track.appendCells(&TimelineCell{IsGap: true, IsBreak: true})
 		}
 	}
@@ -211,7 +209,6 @@ func (tl *Timeline) buildConstraints() {
 		source := tl.findCell(trigger.Source.Block, trigger.Source.Signal)
 
 		group := exclusiveGroup{members: []*TimelineCell{source}}
-		hasCrossTrack := false
 
 		for _, target := range trigger.Targets {
 			t := tl.findCell(target.Block, target.Hook)
@@ -219,13 +216,9 @@ func (tl *Timeline) buildConstraints() {
 				tl.addConstraint("next_row", source, t)
 			} else {
 				tl.addConstraint("same_row", source, t)
-				hasCrossTrack = true
+				source.IsSignal = true
 			}
 			group.members = append(group.members, t)
-		}
-
-		if hasCrossTrack {
-			source.IsSignal = true
 		}
 		tl.exclusives = append(tl.exclusives, group)
 	}

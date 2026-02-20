@@ -46,13 +46,13 @@ type TimelineTrack struct {
 }
 
 type Timeline struct {
-	Tracks []TimelineTrack  `json:"tracks"`
+	Tracks []*TimelineTrack  `json:"tracks"`
 	Blocks map[string]Block `json:"blocks"`
 
-	show        Show            `json:"-"`
-	trackIdx    map[string]int  `json:"-"`
-	constraints []constraint    `json:"-"`
-	exclusives  []exclusiveGroup `json:"-"`
+	show        Show                       `json:"-"`
+	trackIdx    map[string]*TimelineTrack  `json:"-"`
+	constraints []constraint               `json:"-"`
+	exclusives  []exclusiveGroup           `json:"-"`
 }
 
 type TimelineCell struct {
@@ -67,7 +67,7 @@ type TimelineCell struct {
 }
 
 type cellID struct {
-	track int
+	track *TimelineTrack
 	index int
 }
 
@@ -111,14 +111,16 @@ func BuildTimeline(show Show) (Timeline, error) {
 	tl := Timeline{
 		show:     show,
 		Blocks:   map[string]Block{},
-		trackIdx: map[string]int{},
+		trackIdx: map[string]*TimelineTrack{},
 	}
 
-	tl.Tracks = append(tl.Tracks, TimelineTrack{Track: Track{ID: cueTrackID, Name: "Cue"}})
-	tl.trackIdx[cueTrackID] = 0
-	for i, track := range show.Tracks {
-		tl.Tracks = append(tl.Tracks, TimelineTrack{Track: track})
-		tl.trackIdx[track.ID] = i + 1
+	cueTrack := &TimelineTrack{Track: Track{ID: cueTrackID, Name: "Cue"}}
+	tl.Tracks = append(tl.Tracks, cueTrack)
+	tl.trackIdx[cueTrackID] = cueTrack
+	for _, track := range show.Tracks {
+		tt := &TimelineTrack{Track: track}
+		tl.Tracks = append(tl.Tracks, tt)
+		tl.trackIdx[track.ID] = tt
 	}
 	for _, block := range show.Blocks {
 		if block.Type == "cue" {
@@ -158,7 +160,7 @@ func getBlockCells(block Block) []TimelineCell {
 
 func (tl *Timeline) findCell(blockID, event string) cellID {
 	track := tl.trackIdx[tl.Blocks[blockID].Track]
-	for i, c := range tl.Tracks[track].Cells {
+	for i, c := range track.Cells {
 		if !c.IsGap && c.BlockID == blockID && c.Event == event {
 			return cellID{track: track, index: i}
 		}
@@ -184,7 +186,7 @@ func (tl *Timeline) endChainsSameTrack(blockID string) bool {
 func (tl *Timeline) buildCells() {
 	for _, sb := range tl.show.Blocks {
 		block := tl.Blocks[sb.ID]
-		idx := tl.trackIdx[block.Track]
+		track := tl.trackIdx[block.Track]
 		var cells []TimelineCell
 		switch block.Type {
 		case "cue":
@@ -192,9 +194,9 @@ func (tl *Timeline) buildCells() {
 		default:
 			cells = getBlockCells(block)
 		}
-		tl.Tracks[idx].Cells = append(tl.Tracks[idx].Cells, cells...)
+		track.Cells = append(track.Cells, cells...)
 		if block.Type != "cue" && !tl.endChainsSameTrack(block.ID) {
-			tl.Tracks[idx].Cells = append(tl.Tracks[idx].Cells, TimelineCell{IsGap: true, IsBreak: true})
+			track.Cells = append(track.Cells, TimelineCell{IsGap: true, IsBreak: true})
 		}
 	}
 }
@@ -218,7 +220,7 @@ func (tl *Timeline) buildConstraints() {
 		}
 
 		if hasCrossTrack {
-			tl.Tracks[sourceID.track].Cells[sourceID.index].IsSignal = true
+			sourceID.track.Cells[sourceID.index].IsSignal = true
 		}
 		tl.exclusives = append(tl.exclusives, group)
 	}
@@ -266,7 +268,7 @@ func (tl *Timeline) enforceExclusives() bool {
 		}
 		row := tl.rowOf(g.members[0])
 		allAligned := true
-		memberTracks := map[int]bool{}
+		memberTracks := map[*TimelineTrack]bool{}
 		for _, m := range g.members {
 			memberTracks[m.track] = true
 			if tl.rowOf(m) != row {
@@ -276,18 +278,18 @@ func (tl *Timeline) enforceExclusives() bool {
 		if !allAligned {
 			continue
 		}
-		for trackIdx := range tl.Tracks {
-			if memberTracks[trackIdx] {
+		for _, t := range tl.Tracks {
+			if memberTracks[t] {
 				continue
 			}
-			if row >= len(tl.Tracks[trackIdx].Cells) {
+			if row >= len(t.Cells) {
 				continue
 			}
-			c := tl.Tracks[trackIdx].Cells[row]
+			c := t.Cells[row]
 			if c.IsGap || c.BlockID == "" {
 				continue
 			}
-			tl.insertGap(trackIdx, row)
+			tl.insertGap(t, row)
 			return true
 		}
 	}
@@ -298,25 +300,23 @@ func (tl *Timeline) rowOf(id cellID) int {
 	return id.index
 }
 
-func (tl *Timeline) isAllGapRow(row, exceptTrack int) bool {
-	for trackIdx := range tl.Tracks {
-		if trackIdx == exceptTrack {
+func (tl *Timeline) isAllGapRow(row int, except *TimelineTrack) bool {
+	for _, t := range tl.Tracks {
+		if t == except {
 			continue
 		}
-		cells := tl.Tracks[trackIdx].Cells
-		if row >= len(cells) {
+		if row >= len(t.Cells) {
 			continue
 		}
-		if !cells[row].IsGap {
+		if !t.Cells[row].IsGap {
 			return false
 		}
 	}
 	return true
 }
 
-func (tl *Timeline) removeGapAt(track, index int) {
-	cells := tl.Tracks[track].Cells
-	tl.Tracks[track].Cells = append(cells[:index], cells[index+1:]...)
+func (tl *Timeline) removeGapAt(track *TimelineTrack, index int) {
+	track.Cells = append(track.Cells[:index], track.Cells[index+1:]...)
 
 	for i := range tl.constraints {
 		c := &tl.constraints[i]
@@ -337,7 +337,7 @@ func (tl *Timeline) removeGapAt(track, index int) {
 	}
 }
 
-func (tl *Timeline) insertGap(track, beforeIndex int) {
+func (tl *Timeline) insertGap(track *TimelineTrack, beforeIndex int) {
 	for {
 		blocked := false
 		for _, c := range tl.constraints {
@@ -353,15 +353,15 @@ func (tl *Timeline) insertGap(track, beforeIndex int) {
 	}
 
 	if tl.isAllGapRow(beforeIndex, track) {
-		for trackIdx := range tl.Tracks {
-			if trackIdx == track {
+		for _, t := range tl.Tracks {
+			if t == track {
 				continue
 			}
-			if beforeIndex >= len(tl.Tracks[trackIdx].Cells) {
+			if beforeIndex >= len(t.Cells) {
 				continue
 			}
-			if tl.Tracks[trackIdx].Cells[beforeIndex].IsGap {
-				tl.removeGapAt(trackIdx, beforeIndex)
+			if t.Cells[beforeIndex].IsGap {
+				tl.removeGapAt(t, beforeIndex)
 			}
 		}
 		return
@@ -369,7 +369,7 @@ func (tl *Timeline) insertGap(track, beforeIndex int) {
 
 	gap := TimelineCell{IsGap: true}
 	for i := beforeIndex - 1; i >= 0; i-- {
-		c := tl.Tracks[track].Cells[i]
+		c := track.Cells[i]
 		if c.IsGap {
 			continue
 		}
@@ -379,12 +379,12 @@ func (tl *Timeline) insertGap(track, beforeIndex int) {
 		break
 	}
 
-	cells := tl.Tracks[track].Cells
+	cells := track.Cells
 	newCells := make([]TimelineCell, 0, len(cells)+1)
 	newCells = append(newCells, cells[:beforeIndex]...)
 	newCells = append(newCells, gap)
 	newCells = append(newCells, cells[beforeIndex:]...)
-	tl.Tracks[track].Cells = newCells
+	track.Cells = newCells
 
 	for i := range tl.constraints {
 		c := &tl.constraints[i]

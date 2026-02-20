@@ -148,7 +148,6 @@ func BuildTimeline(show Show) (Timeline, error) {
 	b.buildCells()
 	b.buildConstraints()
 	b.assignRows()
-	b.collapseEmptyRows()
 
 	tracks := make([]TimelineTrack, len(b.tracks))
 	for i, t := range b.tracks {
@@ -326,6 +325,43 @@ func (b *timelineBuilder) rowOf(id cellID) int {
 	return id.index
 }
 
+func (b *timelineBuilder) isAllGapRow(row, exceptTrack int) bool {
+	for trackIdx, cells := range b.trackCells {
+		if trackIdx == exceptTrack {
+			continue
+		}
+		if row >= len(cells) {
+			continue
+		}
+		if !cells[row].IsGap {
+			return false
+		}
+	}
+	return true
+}
+
+func (b *timelineBuilder) removeGapAt(track, index int) {
+	b.trackCells[track] = append(b.trackCells[track][:index], b.trackCells[track][index+1:]...)
+
+	for i := range b.constraints {
+		c := &b.constraints[i]
+		if c.a.track == track && c.a.index > index {
+			c.a.index--
+		}
+		if c.b.track == track && c.b.index > index {
+			c.b.index--
+		}
+	}
+	for i := range b.exclusives {
+		for j := range b.exclusives[i].members {
+			m := &b.exclusives[i].members[j]
+			if m.track == track && m.index > index {
+				m.index--
+			}
+		}
+	}
+}
+
 func (b *timelineBuilder) insertGap(track, beforeIndex int) {
 	for {
 		blocked := false
@@ -339,6 +375,21 @@ func (b *timelineBuilder) insertGap(track, beforeIndex int) {
 		if !blocked {
 			break
 		}
+	}
+
+	if b.isAllGapRow(beforeIndex, track) {
+		for trackIdx := range b.trackCells {
+			if trackIdx == track {
+				continue
+			}
+			if beforeIndex >= len(b.trackCells[trackIdx]) {
+				continue
+			}
+			if b.trackCells[trackIdx][beforeIndex].IsGap {
+				b.removeGapAt(trackIdx, beforeIndex)
+			}
+		}
+		return
 	}
 
 	gap := TimelineCell{IsGap: true}
@@ -379,72 +430,4 @@ func (b *timelineBuilder) insertGap(track, beforeIndex int) {
 	}
 }
 
-func (b *timelineBuilder) collapseEmptyRows() {
-	maxLen := 0
-	for _, cells := range b.trackCells {
-		if len(cells) > maxLen {
-			maxLen = len(cells)
-		}
-	}
-
-	keep := make([]bool, maxLen)
-	for r := 0; r < maxLen; r++ {
-		allGaps := true
-		hasBreak := false
-		for _, cells := range b.trackCells {
-			if r >= len(cells) {
-				continue
-			}
-			c := cells[r]
-			if !c.IsGap {
-				allGaps = false
-				break
-			}
-			if c.IsBreak {
-				hasBreak = true
-			}
-		}
-		if !allGaps {
-			keep[r] = true
-			continue
-		}
-		if hasBreak && r+1 < maxLen {
-			canMove := true
-			for _, cells := range b.trackCells {
-				if r >= len(cells) {
-					continue
-				}
-				if !cells[r].IsBreak {
-					continue
-				}
-				if r+1 >= len(cells) || !cells[r+1].IsGap {
-					canMove = false
-					break
-				}
-			}
-			if canMove {
-				for trackIdx, cells := range b.trackCells {
-					if r >= len(cells) || !cells[r].IsBreak {
-						continue
-					}
-					b.trackCells[trackIdx][r+1].IsBreak = true
-				}
-			} else {
-				keep[r] = true
-			}
-		} else if hasBreak {
-			keep[r] = true
-		}
-	}
-
-	for trackIdx := range b.trackCells {
-		var filtered []TimelineCell
-		for r, c := range b.trackCells[trackIdx] {
-			if keep[r] {
-				filtered = append(filtered, c)
-			}
-		}
-		b.trackCells[trackIdx] = filtered
-	}
-}
 

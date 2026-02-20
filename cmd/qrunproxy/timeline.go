@@ -177,6 +177,21 @@ func (b *timelineBuilder) findCell(blockID, event string) cellID {
 	return cellID{-1, -1}
 }
 
+func (b *timelineBuilder) endChainsSameTrack(blockID string) bool {
+	trackID := b.getTrack(blockID)
+	for _, trigger := range b.show.Triggers {
+		if trigger.Source.Block != blockID || trigger.Source.Signal != "END" {
+			continue
+		}
+		for _, target := range trigger.Targets {
+			if target.Hook == "START" && b.getTrack(target.Block) == trackID {
+				return true
+			}
+		}
+	}
+	return false
+}
+
 func (b *timelineBuilder) buildCells() {
 	for _, block := range b.show.Blocks {
 		trackID := b.getTrack(block.ID)
@@ -192,6 +207,9 @@ func (b *timelineBuilder) buildCells() {
 			cells = getBlockCells(block)
 		}
 		b.trackCells[idx] = append(b.trackCells[idx], cells...)
+		if block.Type != "cue" && !b.endChainsSameTrack(block.ID) {
+			b.trackCells[idx] = append(b.trackCells[idx], TimelineCell{IsGap: true})
+		}
 	}
 }
 

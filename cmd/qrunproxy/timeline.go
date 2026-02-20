@@ -1,6 +1,5 @@
 package main
 
-
 const (
 	cueTrackID = "_cue"
 )
@@ -80,9 +79,8 @@ type trackCell struct {
 
 type timelineBuilder struct {
 	blocks    map[string]Block
-	trackIDs  []string
-	tracks    []Track
-	trackIdx  map[string]int
+	tracks   []Track
+	trackIdx map[string]int
 	startSigs map[string][]TriggerTarget
 
 	trackCells  [][]trackCell
@@ -97,11 +95,9 @@ func BuildTimeline(show Show) (Timeline, error) {
 		startSigs: map[string][]TriggerTarget{},
 	}
 
-	b.trackIDs = append(b.trackIDs, cueTrackID)
 	b.tracks = append(b.tracks, Track{ID: cueTrackID, Name: "Cue"})
 	b.trackIdx[cueTrackID] = 0
 	for i, track := range show.Tracks {
-		b.trackIDs = append(b.trackIDs, track.ID)
 		b.tracks = append(b.tracks, track)
 		b.trackIdx[track.ID] = i + 1
 	}
@@ -114,25 +110,16 @@ func BuildTimeline(show Show) (Timeline, error) {
 		}
 	}
 
-	b.trackCells = make([][]trackCell, len(b.trackIDs))
+	b.trackCells = make([][]trackCell, len(b.tracks))
 
-	if err := b.buildCells(show); err != nil {
-		return Timeline{}, err
-	}
+	b.buildCells(show)
 
 	b.assignRows()
 
-	rows := b.renderRows()
-
-	blocks := map[string]Block{}
-	for id, block := range b.blocks {
-		blocks[id] = block
-	}
-
 	return Timeline{
 		Tracks: b.tracks,
-		Blocks: blocks,
-		Rows:   rows,
+		Blocks: b.blocks,
+		Rows:   b.renderRows(),
 	}, nil
 }
 
@@ -171,7 +158,7 @@ type blockCells struct {
 	end     cellID
 }
 
-func (b *timelineBuilder) buildCells(show Show) error {
+func (b *timelineBuilder) buildCells(show Show) {
 	cells := map[string]blockCells{}
 
 	for _, block := range show.Blocks {
@@ -246,7 +233,6 @@ func (b *timelineBuilder) buildCells(show Show) error {
 		b.exclusives = append(b.exclusives, group)
 	}
 
-	return nil
 }
 
 func (b *timelineBuilder) expandTargets(targets []TriggerTarget) []TriggerTarget {
@@ -389,7 +375,7 @@ func (b *timelineBuilder) renderRows() []TimelineRow {
 
 	rows := make([]TimelineRow, maxLen)
 	for r := range rows {
-		rows[r].Cells = make([]TimelineCell, len(b.trackIDs))
+		rows[r].Cells = make([]TimelineCell, len(b.tracks))
 	}
 
 	for trackIdx, cells := range b.trackCells {

@@ -1,5 +1,7 @@
 package main
 
+import "fmt"
+
 const (
 	cueTrackID = "_cue"
 )
@@ -108,7 +110,38 @@ func newTimelineBuilder(show Show) *timelineBuilder {
 	return b
 }
 
+func validateShow(show Show) error {
+	blockSet := map[string]bool{}
+	for _, block := range show.Blocks {
+		blockSet[block.ID] = true
+	}
+
+	startTargeted := map[string]bool{}
+	for _, trigger := range show.Triggers {
+		for _, target := range trigger.Targets {
+			if target.Hook == "START" {
+				startTargeted[target.Block] = true
+			}
+		}
+	}
+
+	for _, block := range show.Blocks {
+		if block.Type == "cue" {
+			continue
+		}
+		if !startTargeted[block.ID] {
+			return fmt.Errorf("block %q has no trigger for its START", block.ID)
+		}
+	}
+
+	return nil
+}
+
 func BuildTimeline(show Show) (Timeline, error) {
+	if err := validateShow(show); err != nil {
+		return Timeline{}, err
+	}
+
 	b := newTimelineBuilder(show)
 
 	b.buildCells()
@@ -291,6 +324,20 @@ func (b *timelineBuilder) rowOf(id cellID) int {
 }
 
 func (b *timelineBuilder) insertGap(track, beforeIndex int) {
+	for {
+		blocked := false
+		for _, c := range b.constraints {
+			if c.kind == "next_row" && c.a.track == track && c.b.track == track && c.a.index == beforeIndex-1 && c.b.index == beforeIndex {
+				beforeIndex = c.a.index
+				blocked = true
+				break
+			}
+		}
+		if !blocked {
+			break
+		}
+	}
+
 	cells := b.trackCells[track]
 	newCells := make([]TimelineCell, 0, len(cells)+1)
 	newCells = append(newCells, cells[:beforeIndex]...)

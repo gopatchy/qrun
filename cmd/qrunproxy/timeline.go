@@ -57,7 +57,8 @@ type TimelineCell struct {
 	Event    string `json:"event,omitempty"`
 	IsTitle  bool   `json:"is_title,omitempty"`
 	IsSignal bool   `json:"is_signal,omitempty"`
-	IsGap    bool   `json:"-"`
+	IsGap    bool `json:"-"`
+	IsBreak  bool `json:"-"`
 }
 
 type cellID struct {
@@ -147,6 +148,7 @@ func BuildTimeline(show Show) (Timeline, error) {
 	b.buildCells()
 	b.buildConstraints()
 	b.assignRows()
+	b.collapseEmptyRows()
 
 	return Timeline{
 		Tracks: b.tracks,
@@ -215,7 +217,7 @@ func (b *timelineBuilder) buildCells() {
 		}
 		b.trackCells[idx] = append(b.trackCells[idx], cells...)
 		if block.Type != "cue" && !b.endChainsSameTrack(block.ID) {
-			b.trackCells[idx] = append(b.trackCells[idx], TimelineCell{IsGap: true})
+			b.trackCells[idx] = append(b.trackCells[idx], TimelineCell{IsGap: true, IsBreak: true})
 		}
 	}
 }
@@ -361,6 +363,75 @@ func (b *timelineBuilder) insertGap(track, beforeIndex int) {
 				m.index++
 			}
 		}
+	}
+}
+
+func (b *timelineBuilder) collapseEmptyRows() {
+	maxLen := 0
+	for _, cells := range b.trackCells {
+		if len(cells) > maxLen {
+			maxLen = len(cells)
+		}
+	}
+
+	keep := make([]bool, maxLen)
+	for r := 0; r < maxLen; r++ {
+		allGaps := true
+		hasBreak := false
+		for _, cells := range b.trackCells {
+			if r >= len(cells) {
+				continue
+			}
+			c := cells[r]
+			if !c.IsGap {
+				allGaps = false
+				break
+			}
+			if c.IsBreak {
+				hasBreak = true
+			}
+		}
+		if !allGaps {
+			keep[r] = true
+			continue
+		}
+		if hasBreak && r+1 < maxLen {
+			canMove := true
+			for _, cells := range b.trackCells {
+				if r >= len(cells) {
+					continue
+				}
+				if !cells[r].IsBreak {
+					continue
+				}
+				if r+1 >= len(cells) || !cells[r+1].IsGap {
+					canMove = false
+					break
+				}
+			}
+			if canMove {
+				for trackIdx, cells := range b.trackCells {
+					if r >= len(cells) || !cells[r].IsBreak {
+						continue
+					}
+					b.trackCells[trackIdx][r+1].IsBreak = true
+				}
+			} else {
+				keep[r] = true
+			}
+		} else if hasBreak {
+			keep[r] = true
+		}
+	}
+
+	for trackIdx := range b.trackCells {
+		var filtered []TimelineCell
+		for r, c := range b.trackCells[trackIdx] {
+			if keep[r] {
+				filtered = append(filtered, c)
+			}
+		}
+		b.trackCells[trackIdx] = filtered
 	}
 }
 

@@ -100,6 +100,9 @@ func newTimelineBuilder(show Show) *timelineBuilder {
 		b.trackIdx[track.ID] = i + 1
 	}
 	for _, block := range show.Blocks {
+		if block.Type == "cue" {
+			block.Track = cueTrackID
+		}
 		b.blocks[block.ID] = block
 	}
 	for _, trigger := range show.Triggers {
@@ -128,21 +131,7 @@ func BuildTimeline(show Show) (Timeline, error) {
 }
 
 func (b *timelineBuilder) addConstraint(kind string, a, b2 cellID) {
-	if a.track < 0 || b2.track < 0 {
-		return
-	}
 	b.constraints = append(b.constraints, constraint{kind: kind, a: a, b: b2})
-}
-
-func (b *timelineBuilder) getTrack(blockID string) string {
-	block, ok := b.blocks[blockID]
-	if !ok {
-		return ""
-	}
-	if block.Type == "cue" {
-		return cueTrackID
-	}
-	return block.Track
 }
 
 func getCueCells(block Block) []TimelineCell {
@@ -164,27 +153,23 @@ func getBlockCells(block Block) []TimelineCell {
 }
 
 func (b *timelineBuilder) findCell(blockID, event string) cellID {
-	trackID := b.getTrack(blockID)
-	if trackID == "" {
-		return cellID{-1, -1}
-	}
-	track := b.trackIdx[trackID]
+	track := b.trackIdx[b.blocks[blockID].Track]
 	for i, c := range b.trackCells[track] {
 		if !c.IsGap && c.BlockID == blockID && c.Event == event {
 			return cellID{track: track, index: i}
 		}
 	}
-	return cellID{-1, -1}
+	panic("cell not found: " + blockID + " " + event)
 }
 
 func (b *timelineBuilder) endChainsSameTrack(blockID string) bool {
-	trackID := b.getTrack(blockID)
+	trackID := b.blocks[blockID].Track
 	for _, trigger := range b.show.Triggers {
 		if trigger.Source.Block != blockID || trigger.Source.Signal != "END" {
 			continue
 		}
 		for _, target := range trigger.Targets {
-			if target.Hook == "START" && b.getTrack(target.Block) == trackID {
+			if target.Hook == "START" && b.blocks[target.Block].Track == trackID {
 				return true
 			}
 		}
@@ -193,12 +178,9 @@ func (b *timelineBuilder) endChainsSameTrack(blockID string) bool {
 }
 
 func (b *timelineBuilder) buildCells() {
-	for _, block := range b.show.Blocks {
-		trackID := b.getTrack(block.ID)
-		if trackID == "" {
-			continue
-		}
-		idx := b.trackIdx[trackID]
+	for _, sb := range b.show.Blocks {
+		block := b.blocks[sb.ID]
+		idx := b.trackIdx[block.Track]
 		var cells []TimelineCell
 		switch block.Type {
 		case "cue":
@@ -220,9 +202,6 @@ func (b *timelineBuilder) buildConstraints() {
 		}
 
 		sourceID := b.findCell(trigger.Source.Block, trigger.Source.Signal)
-		if sourceID.track < 0 {
-			continue
-		}
 
 		group := exclusiveGroup{members: []cellID{sourceID}}
 		hasCrossTrack := false
@@ -230,9 +209,6 @@ func (b *timelineBuilder) buildConstraints() {
 		allTargets := b.expandTargets(trigger.Targets)
 		for _, target := range allTargets {
 			targetID := b.findCell(target.Block, target.Hook)
-			if targetID.track < 0 {
-				continue
-			}
 			if sourceID.track == targetID.track {
 				b.addConstraint("next_row", sourceID, targetID)
 			} else {
@@ -272,9 +248,6 @@ func (b *timelineBuilder) expandTargets(targets []TriggerTarget) []TriggerTarget
 }
 
 func (b *timelineBuilder) setSignal(id cellID) {
-	if id.track < 0 {
-		return
-	}
 	b.trackCells[id.track][id.index].IsSignal = true
 }
 

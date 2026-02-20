@@ -4,6 +4,7 @@ import (
 	"context"
 	"embed"
 	"encoding/json"
+	"flag"
 	"fmt"
 	"io/fs"
 	"net"
@@ -17,15 +18,13 @@ import (
 var staticFS embed.FS
 
 func main() {
-	addr := ":8080"
-	var runAndExit []string
+	addr := flag.String("addr", ":8080", "listen address")
+	runAndExitStr := flag.String("run-and-exit", "", "command to run after server starts, then exit")
+	flag.Parse()
 
-	for _, arg := range os.Args[1:] {
-		if v, ok := strings.CutPrefix(arg, "--run-and-exit="); ok {
-			runAndExit = strings.Fields(v)
-		} else {
-			addr = arg
-		}
+	var runAndExit []string
+	if *runAndExitStr != "" {
+		runAndExit = strings.Fields(*runAndExitStr)
 	}
 
 	show, err := loadMockShow()
@@ -56,14 +55,18 @@ func main() {
 	})
 
 	if len(runAndExit) > 0 {
-		ln, err := net.Listen("tcp", addr)
+		ln, err := net.Listen("tcp", *addr)
 		if err != nil {
 			fmt.Fprintf(os.Stderr, "Error: %v\n", err)
 			os.Exit(1)
 		}
+		port := fmt.Sprintf("%d", ln.Addr().(*net.TCPAddr).Port)
 		srv := &http.Server{Handler: mux}
 		go srv.Serve(ln)
 
+		for i, arg := range runAndExit {
+			runAndExit[i] = strings.ReplaceAll(arg, "{port}", port)
+		}
 		cmd := exec.Command(runAndExit[0], runAndExit[1:]...)
 		cmd.Stdout = os.Stdout
 		cmd.Stderr = os.Stderr
@@ -76,8 +79,13 @@ func main() {
 		return
 	}
 
-	fmt.Printf("Listening on %s\n", addr)
-	if err := http.ListenAndServe(addr, mux); err != nil {
+	ln, err := net.Listen("tcp", *addr)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Error: %v\n", err)
+		os.Exit(1)
+	}
+	fmt.Printf("Listening on %s\n", ln.Addr())
+	if err := http.Serve(ln, mux); err != nil {
 		fmt.Fprintf(os.Stderr, "Error: %v\n", err)
 		os.Exit(1)
 	}

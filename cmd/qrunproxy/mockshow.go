@@ -113,25 +113,24 @@ func GenerateMockShow(numTracks, numCues, numBlocks int) *Show {
 				cueTargets = append(cueTargets, TriggerTarget{Block: block.ID, Hook: "START"})
 				placed++
 
-				prev := block
+				lastOnTrack[trackIdx] = block
 				chainLen := rng.IntN(3)
 				for range chainLen {
 					if placed >= numBlocks {
 						break
 					}
-					if !prev.hasDefinedTiming() {
+					if !lastOnTrack[trackIdx].hasDefinedTiming() {
 						break
 					}
 					next := randBlock(trackIdx)
 					show.Blocks = append(show.Blocks, next)
 					show.Triggers = append(show.Triggers, &Trigger{
-						Source:  TriggerSource{Block: prev.ID, Signal: "END"},
+						Source:  TriggerSource{Block: lastOnTrack[trackIdx].ID, Signal: "END"},
 						Targets: []TriggerTarget{{Block: next.ID, Hook: "START"}},
 					})
-					prev = next
+					lastOnTrack[trackIdx] = next
 					placed++
 				}
-				lastOnTrack[trackIdx] = prev
 			}
 
 			if len(cueTargets) > 0 {

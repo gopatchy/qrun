@@ -91,6 +91,7 @@ func (show *Show) Validate() error {
 	}
 	hookTargeted := map[blockEvent]bool{}
 	startTargeted := map[string]bool{}
+	sourceUsed := map[blockEvent]bool{}
 	for _, trigger := range show.Triggers {
 		sourceBlock := blocksByID[trigger.Source.Block]
 		if sourceBlock == nil {
@@ -99,6 +100,11 @@ func (show *Show) Validate() error {
 		if !isValidEventForBlock(sourceBlock, trigger.Source.Signal) {
 			return fmt.Errorf("trigger source signal %q is invalid for block %q", trigger.Source.Signal, trigger.Source.Block)
 		}
+		src := blockEvent{trigger.Source.Block, trigger.Source.Signal}
+		if sourceUsed[src] {
+			return fmt.Errorf("duplicate trigger source: block %q signal %q", trigger.Source.Block, trigger.Source.Signal)
+		}
+		sourceUsed[src] = true
 
 		for _, target := range trigger.Targets {
 			targetBlock := blocksByID[target.Block]
@@ -122,12 +128,9 @@ func (show *Show) Validate() error {
 		if !startTargeted[block.ID] {
 			return fmt.Errorf("block %q has no trigger for its START", block.ID)
 		}
-		/*
-			TODO: Put this back when mock is fixed
-			if !block.hasDefinedTiming() && !hookTargeted[blockEvent{block.ID, "FADE_OUT"}] && !hookTargeted[blockEvent{block.ID, "END"}] {
-				return fmt.Errorf("block %q has no defined timing and nothing triggers its FADE_OUT or END", block.ID)
-			}
-		*/
+		if !block.hasDefinedTiming() && !hookTargeted[blockEvent{block.ID, "FADE_OUT"}] && !hookTargeted[blockEvent{block.ID, "END"}] {
+			return fmt.Errorf("block %q has no defined timing and nothing triggers its FADE_OUT or END", block.ID)
+		}
 	}
 
 	for _, trigger := range show.Triggers {

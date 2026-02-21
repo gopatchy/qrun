@@ -33,14 +33,74 @@ type TimelineCell struct {
 	track    *TimelineTrack `json:"-"`
 }
 
+func (c *TimelineCell) String() string {
+	return fmt.Sprintf("%s/%s@%s:r%d", c.BlockID, c.Event, c.track.ID, c.row)
+}
+
 type constraint struct {
 	kind string
 	a    *TimelineCell
 	b    *TimelineCell
 }
 
+func (c constraint) satisfied() bool {
+	switch c.kind {
+	case "same_row":
+		return c.a.row == c.b.row
+	case "next_row":
+		return c.b.row > c.a.row
+	}
+	return true
+}
+
+func (c constraint) String() string {
+	switch c.kind {
+	case "same_row":
+		return fmt.Sprintf("same_row(%s, %s)", c.a, c.b)
+	case "next_row":
+		return fmt.Sprintf("next_row(%s -> %s)", c.a, c.b)
+	}
+	return fmt.Sprintf("%s(%s, %s)", c.kind, c.a, c.b)
+}
+
 type exclusiveGroup struct {
 	members []*TimelineCell
+}
+
+func (g exclusiveGroup) satisfied(tracks []*TimelineTrack) bool {
+	row := g.members[0].row
+	memberTracks := map[*TimelineTrack]bool{}
+	for _, m := range g.members {
+		memberTracks[m.track] = true
+		if m.row != row {
+			return true
+		}
+	}
+	for _, t := range tracks {
+		if memberTracks[t] {
+			continue
+		}
+		if row >= len(t.Cells) {
+			continue
+		}
+		c := t.Cells[row]
+		if c.IsGap || c.BlockID == "" {
+			continue
+		}
+		return false
+	}
+	return true
+}
+
+func (g exclusiveGroup) String() string {
+	s := "exclusive("
+	for i, m := range g.members {
+		if i > 0 {
+			s += ", "
+		}
+		s += m.String()
+	}
+	return s + ")"
 }
 
 type cellKey struct {
@@ -189,15 +249,13 @@ func (tl *Timeline) assignRows() error {
 		return nil
 	}
 	for _, c := range tl.constraints {
-		switch c.kind {
-		case "same_row":
-			if c.a.row != c.b.row {
-				return fmt.Errorf("assignRows: unsatisfied %s constraint: %s/%s (row %d) vs %s/%s (row %d)", c.kind, c.a.BlockID, c.a.Event, c.a.row, c.b.BlockID, c.b.Event, c.b.row)
-			}
-		case "next_row":
-			if c.b.row <= c.a.row {
-				return fmt.Errorf("assignRows: unsatisfied %s constraint: %s/%s (row %d) must follow %s/%s (row %d)", c.kind, c.b.BlockID, c.b.Event, c.b.row, c.a.BlockID, c.a.Event, c.a.row)
-			}
+		if !c.satisfied() {
+			return fmt.Errorf("assignRows: unsatisfied %s", c)
+		}
+	}
+	for _, g := range tl.exclusives {
+		if !g.satisfied(tl.Tracks) {
+			return fmt.Errorf("assignRows: unsatisfied %s", g)
 		}
 	}
 	return fmt.Errorf("assignRows: did not converge")
@@ -205,38 +263,33 @@ func (tl *Timeline) assignRows() error {
 
 func (tl *Timeline) enforceConstraints() bool {
 	for _, c := range tl.constraints {
+		if c.satisfied() {
+			continue
+		}
 		switch c.kind {
 		case "same_row":
 			if c.a.row < c.b.row {
 				tl.insertGap(c.a.track, c.a.row)
-				return true
-			} else if c.b.row < c.a.row {
+			} else {
 				tl.insertGap(c.b.track, c.b.row)
-				return true
 			}
 		case "next_row":
-			if c.b.row <= c.a.row {
-				tl.insertGap(c.b.track, c.b.row)
-				return true
-			}
+			tl.insertGap(c.b.track, c.b.row)
 		}
+		return true
 	}
 	return false
 }
 
 func (tl *Timeline) enforceExclusives() bool {
 	for _, g := range tl.exclusives {
+		if g.satisfied(tl.Tracks) {
+			continue
+		}
 		row := g.members[0].row
-		allAligned := true
 		memberTracks := map[*TimelineTrack]bool{}
 		for _, m := range g.members {
 			memberTracks[m.track] = true
-			if m.row != row {
-				allAligned = false
-			}
-		}
-		if !allAligned {
-			continue
 		}
 		for _, t := range tl.Tracks {
 			if memberTracks[t] {

@@ -30,8 +30,9 @@ func GenerateMockShow(numTracks, numCues, numBlocks int) *Show {
 
 	show := &Show{}
 	blockIdx := 0
-	nextBlockID := func() string {
-		id := fmt.Sprintf("b%d", blockIdx)
+	curCueName := ""
+	nextBlockID := func(trackIdx int) string {
+		id := fmt.Sprintf("%s-t%d-b%d", curCueName, trackIdx, blockIdx)
 		blockIdx++
 		return id
 	}
@@ -69,7 +70,7 @@ func GenerateMockShow(numTracks, numCues, numBlocks int) *Show {
 			typ, name = "light", lightNamePool[rng.IntN(len(lightNamePool))]
 		}
 		return &Block{
-			ID:    nextBlockID(),
+			ID:    nextBlockID(trackIdx),
 			Type:  typ,
 			Track: fmt.Sprintf("track_%d", trackIdx),
 			Name:  name,
@@ -80,7 +81,12 @@ func GenerateMockShow(numTracks, numCues, numBlocks int) *Show {
 	placed := 0
 	cueIdx := 0
 	scene := 0
-	lastOnTrack := make(map[int]*Block)
+	chainFromByTrack := make(map[int]*Block)
+	needsEnd := make(map[string]*Block)
+	allowedTracks := make(map[int]bool, numTracks)
+	for i := range numTracks {
+		allowedTracks[i] = true
+	}
 
 	for placed < numBlocks && cueIdx < numCues {
 		scene++
@@ -90,38 +96,57 @@ func GenerateMockShow(numTracks, numCues, numBlocks int) *Show {
 			if placed >= numBlocks || cueIdx >= numCues {
 				break
 			}
-			clear(lastOnTrack)
+			for trackIdx, blk := range chainFromByTrack {
+				if needsEnd[blk.ID] == nil {
+					delete(chainFromByTrack, trackIdx)
+				}
+			}
 
+			curCueName = fmt.Sprintf("S%d Q%d", scene, intra)
 			cue := &Block{
-				ID:   fmt.Sprintf("q%d", cueIdx),
+				ID:   curCueName,
 				Type: "cue",
-				Name: fmt.Sprintf("S%d Q%d", scene, intra),
+				Name: curCueName,
 			}
 			show.Blocks = append(show.Blocks, cue)
 			cueIdx++
 
 			blocksThisCue := 1 + rng.IntN(numTracks*2)
 			cueTargets := []TriggerTarget{}
+			for id, blk := range needsEnd {
+				cueTargets = append(cueTargets, TriggerTarget{Block: blk.ID, Hook: "END"})
+				delete(needsEnd, id)
+				for ti := range numTracks {
+					if chainFromByTrack[ti] == blk {
+						allowedTracks[ti] = true
+					}
+				}
+			}
 			for range blocksThisCue {
 				if placed >= numBlocks {
 					break
 				}
 				trackIdx := rng.IntN(numTracks)
-				if prev := lastOnTrack[trackIdx]; prev != nil && !prev.hasDefinedTiming() {
+				if !allowedTracks[trackIdx] {
 					continue
 				}
 				block := randBlock(trackIdx)
 				show.Blocks = append(show.Blocks, block)
 				placed++
-				if prev := lastOnTrack[trackIdx]; prev != nil {
+				if prev := chainFromByTrack[trackIdx]; prev != nil {
 					show.Triggers = append(show.Triggers, &Trigger{
 						Source:  TriggerSource{Block: prev.ID, Signal: "END"},
 						Targets: []TriggerTarget{{Block: block.ID, Hook: "START"}},
 					})
+					delete(needsEnd, prev.ID)
 				} else {
 					cueTargets = append(cueTargets, TriggerTarget{Block: block.ID, Hook: "START"})
 				}
-				lastOnTrack[trackIdx] = block
+				if !block.hasDefinedTiming() {
+					needsEnd[block.ID] = block
+					allowedTracks[trackIdx] = false
+				}
+				chainFromByTrack[trackIdx] = block
 			}
 
 			if len(cueTargets) > 0 {
@@ -133,17 +158,21 @@ func GenerateMockShow(numTracks, numCues, numBlocks int) *Show {
 		}
 
 		endTargets := []TriggerTarget{}
-		for _, blk := range lastOnTrack {
-			if blk.hasDefinedTiming() {
-				continue
-			}
+		for id, blk := range needsEnd {
 			endTargets = append(endTargets, TriggerTarget{Block: blk.ID, Hook: "END"})
+			delete(needsEnd, id)
+			for ti := range numTracks {
+				if chainFromByTrack[ti] == blk {
+					allowedTracks[ti] = true
+				}
+			}
 		}
-		if len(endTargets) > 0 && cueIdx < numCues {
+		if len(endTargets) > 0 {
+			endCueName := fmt.Sprintf("S%d End", scene)
 			endCue := &Block{
-				ID:   fmt.Sprintf("q%d", cueIdx),
+				ID:   endCueName,
 				Type: "cue",
-				Name: fmt.Sprintf("S%d End", scene),
+				Name: endCueName,
 			}
 			show.Blocks = append(show.Blocks, endCue)
 			cueIdx++
@@ -156,10 +185,11 @@ func GenerateMockShow(numTracks, numCues, numBlocks int) *Show {
 
 	for cueIdx < numCues {
 		scene++
+		emptyCueName := fmt.Sprintf("S%d Q1", scene)
 		cue := &Block{
-			ID:   fmt.Sprintf("q%d", cueIdx),
+			ID:   emptyCueName,
 			Type: "cue",
-			Name: fmt.Sprintf("S%d Q1", scene),
+			Name: emptyCueName,
 		}
 		show.Blocks = append(show.Blocks, cue)
 		cueIdx++

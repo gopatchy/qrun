@@ -122,6 +122,12 @@ func (show *Show) Validate() error {
 		if !startTargeted[block.ID] {
 			return fmt.Errorf("block %q has no trigger for its START", block.ID)
 		}
+		/*
+			TODO: Put this back when mock is fixed
+			if !block.hasDefinedTiming() && !hookTargeted[blockEvent{block.ID, "FADE_OUT"}] && !hookTargeted[blockEvent{block.ID, "END"}] {
+				return fmt.Errorf("block %q has no defined timing and nothing triggers its FADE_OUT or END", block.ID)
+			}
+		*/
 	}
 
 	for _, trigger := range show.Triggers {

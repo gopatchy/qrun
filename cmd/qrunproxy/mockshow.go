@@ -79,62 +79,73 @@ func GenerateMockShow(numTracks, numCues, numBlocks int) *Show {
 
 	placed := 0
 	cueIdx := 0
+	scene := 0
 
 	for placed < numBlocks && cueIdx < numCues {
-		cue := &Block{
-			ID:   fmt.Sprintf("q%d", cueIdx*10),
-			Type: "cue",
-			Name: fmt.Sprintf("Q%d", cueIdx*10),
-		}
-		show.Blocks = append(show.Blocks, cue)
-		cueIdx++
+		scene++
+		cuesInScene := 2 + rng.IntN(3)
 
-		tracksThisCue := numTracks - rng.IntN(2)
-		perm := rng.Perm(numTracks)
-
-		cueTargets := []TriggerTarget{}
-		for _, trackIdx := range perm[:tracksThisCue] {
-			if placed >= numBlocks {
+		for intra := 1; intra <= cuesInScene; intra++ {
+			if placed >= numBlocks || cueIdx >= numCues {
 				break
 			}
-			block := randBlock(trackIdx)
-			show.Blocks = append(show.Blocks, block)
-			cueTargets = append(cueTargets, TriggerTarget{Block: block.ID, Hook: "START"})
-			placed++
 
-			prev := block
-			chainLen := rng.IntN(3)
-			for range chainLen {
+			cue := &Block{
+				ID:   fmt.Sprintf("q%d", cueIdx),
+				Type: "cue",
+				Name: fmt.Sprintf("S%d Q%d", scene, intra),
+			}
+			show.Blocks = append(show.Blocks, cue)
+			cueIdx++
+
+			tracksThisCue := numTracks - rng.IntN(2)
+			perm := rng.Perm(numTracks)
+
+			cueTargets := []TriggerTarget{}
+			for _, trackIdx := range perm[:tracksThisCue] {
 				if placed >= numBlocks {
 					break
 				}
-				if !prev.hasDefinedTiming() {
-					break
-				}
-				next := randBlock(trackIdx)
-				show.Blocks = append(show.Blocks, next)
-				show.Triggers = append(show.Triggers, &Trigger{
-					Source:  TriggerSource{Block: prev.ID, Signal: "END"},
-					Targets: []TriggerTarget{{Block: next.ID, Hook: "START"}},
-				})
-				prev = next
+				block := randBlock(trackIdx)
+				show.Blocks = append(show.Blocks, block)
+				cueTargets = append(cueTargets, TriggerTarget{Block: block.ID, Hook: "START"})
 				placed++
-			}
-		}
 
-		if len(cueTargets) > 0 {
-			show.Triggers = append(show.Triggers, &Trigger{
-				Source:  TriggerSource{Block: cue.ID, Signal: "GO"},
-				Targets: cueTargets,
-			})
+				prev := block
+				chainLen := rng.IntN(3)
+				for range chainLen {
+					if placed >= numBlocks {
+						break
+					}
+					if !prev.hasDefinedTiming() {
+						break
+					}
+					next := randBlock(trackIdx)
+					show.Blocks = append(show.Blocks, next)
+					show.Triggers = append(show.Triggers, &Trigger{
+						Source:  TriggerSource{Block: prev.ID, Signal: "END"},
+						Targets: []TriggerTarget{{Block: next.ID, Hook: "START"}},
+					})
+					prev = next
+					placed++
+				}
+			}
+
+			if len(cueTargets) > 0 {
+				show.Triggers = append(show.Triggers, &Trigger{
+					Source:  TriggerSource{Block: cue.ID, Signal: "GO"},
+					Targets: cueTargets,
+				})
+			}
 		}
 	}
 
 	for cueIdx < numCues {
+		scene++
 		cue := &Block{
-			ID:   fmt.Sprintf("q%d", cueIdx*10),
+			ID:   fmt.Sprintf("q%d", cueIdx),
 			Type: "cue",
-			Name: fmt.Sprintf("Q%d", cueIdx*10),
+			Name: fmt.Sprintf("S%d Q1", scene),
 		}
 		show.Blocks = append(show.Blocks, cue)
 		cueIdx++

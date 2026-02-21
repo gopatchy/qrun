@@ -225,34 +225,35 @@ func (tl *Timeline) buildConstraints() {
 
 func (tl *Timeline) assignRows() {
 	for {
-		found := false
-		for _, c := range tl.constraints {
-			switch c.kind {
-			case "same_row":
-				if c.a.row < c.b.row {
-					tl.insertGap(c.a.track, c.a.row)
-					found = true
-				} else if c.b.row < c.a.row {
-					tl.insertGap(c.b.track, c.b.row)
-					found = true
-				}
-			case "next_row":
-				if c.b.row <= c.a.row {
-					tl.insertGap(c.b.track, c.b.row)
-					found = true
-				}
-			}
-			if found {
-				break
-			}
+		if tl.enforceConstraints() {
+			continue
 		}
-		if !found {
-			found = tl.enforceExclusives()
+		if tl.enforceExclusives() {
+			continue
 		}
-		if !found {
-			break
+		break
+	}
+}
+
+func (tl *Timeline) enforceConstraints() bool {
+	for _, c := range tl.constraints {
+		switch c.kind {
+		case "same_row":
+			if c.a.row < c.b.row {
+				tl.insertGap(c.a.track, c.a.row)
+				return true
+			} else if c.b.row < c.a.row {
+				tl.insertGap(c.b.track, c.b.row)
+				return true
+			}
+		case "next_row":
+			if c.b.row <= c.a.row {
+				tl.insertGap(c.b.track, c.b.row)
+				return true
+			}
 		}
 	}
+	return false
 }
 
 func (tl *Timeline) enforceExclusives() bool {

@@ -25,7 +25,7 @@ var delayNamePool = []string{
 	"1s Delay", "2s Delay", "3s Delay", "5s Delay", "Hold",
 }
 
-func GenerateMockShow(numTracks, numCues, numBlocks int) *Show {
+func GenerateMockShow(numTracks, numScenes, avgCuesPerScene, avgBlocksPerCue int) *Show {
 	rng := rand.New(rand.NewPCG(42, 0))
 
 	show := &Show{}
@@ -78,9 +78,6 @@ func GenerateMockShow(numTracks, numCues, numBlocks int) *Show {
 		}
 	}
 
-	placed := 0
-	cueIdx := 0
-	scene := 0
 	chainFromByTrack := make(map[int]*Block)
 	needsEnd := make(map[string]*Block)
 	allowedTracks := make(map[int]bool, numTracks)
@@ -88,14 +85,10 @@ func GenerateMockShow(numTracks, numCues, numBlocks int) *Show {
 		allowedTracks[i] = true
 	}
 
-	for placed < numBlocks && cueIdx < numCues {
-		scene++
-		cuesInScene := 2 + rng.IntN(3)
+	for scene := 1; scene <= numScenes; scene++ {
+		cuesInScene := 1 + rng.IntN(avgCuesPerScene*2)
 
 		for intra := 1; intra <= cuesInScene; intra++ {
-			if placed >= numBlocks || cueIdx >= numCues {
-				break
-			}
 			for trackIdx, blk := range chainFromByTrack {
 				if needsEnd[blk.ID] == nil {
 					delete(chainFromByTrack, trackIdx)
@@ -109,9 +102,8 @@ func GenerateMockShow(numTracks, numCues, numBlocks int) *Show {
 				Name: curCueName,
 			}
 			show.Blocks = append(show.Blocks, cue)
-			cueIdx++
 
-			blocksThisCue := 1 + rng.IntN(numTracks*2)
+			blocksThisCue := 1 + rng.IntN(avgBlocksPerCue*2)
 			cueTargets := []TriggerTarget{}
 			for id, blk := range needsEnd {
 				cueTargets = append(cueTargets, TriggerTarget{Block: blk.ID, Hook: "END"})
@@ -123,16 +115,12 @@ func GenerateMockShow(numTracks, numCues, numBlocks int) *Show {
 				}
 			}
 			for range blocksThisCue {
-				if placed >= numBlocks {
-					break
-				}
 				trackIdx := rng.IntN(numTracks)
 				if !allowedTracks[trackIdx] {
 					continue
 				}
 				block := randBlock(trackIdx)
 				show.Blocks = append(show.Blocks, block)
-				placed++
 				if prev := chainFromByTrack[trackIdx]; prev != nil {
 					show.Triggers = append(show.Triggers, &Trigger{
 						Source:  TriggerSource{Block: prev.ID, Signal: "END"},
@@ -175,24 +163,11 @@ func GenerateMockShow(numTracks, numCues, numBlocks int) *Show {
 				Name: endCueName,
 			}
 			show.Blocks = append(show.Blocks, endCue)
-			cueIdx++
 			show.Triggers = append(show.Triggers, &Trigger{
 				Source:  TriggerSource{Block: endCue.ID, Signal: "GO"},
 				Targets: endTargets,
 			})
 		}
-	}
-
-	for cueIdx < numCues {
-		scene++
-		emptyCueName := fmt.Sprintf("S%d Q1", scene)
-		cue := &Block{
-			ID:   emptyCueName,
-			Type: "cue",
-			Name: emptyCueName,
-		}
-		show.Blocks = append(show.Blocks, cue)
-		cueIdx++
 	}
 
 	return show

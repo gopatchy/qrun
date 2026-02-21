@@ -7,7 +7,7 @@ import (
 
 func TestBuildTimelineFromMockShow(t *testing.T) {
 	t0 := time.Now()
-	show := GenerateMockShow(5, 100, 1000)
+	show := GenerateMockShow(5, 20, 4, 5)
 	t.Logf("GenerateMockShow: %v (%d blocks, %d triggers)", time.Since(t0), len(show.Blocks), len(show.Triggers))
 
 	t1 := time.Now()
@@ -26,7 +26,7 @@ func TestBuildTimelineFromMockShow(t *testing.T) {
 }
 
 func BenchmarkBuildTimeline(b *testing.B) {
-	show := GenerateMockShow(5, 100, 1000)
+	show := GenerateMockShow(5, 20, 4, 5)
 	if err := show.Validate(); err != nil {
 		b.Fatal(err)
 	}

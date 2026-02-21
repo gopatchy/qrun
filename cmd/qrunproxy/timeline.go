@@ -39,6 +39,18 @@ type TimelineCell struct {
 	track    *TimelineTrack `json:"-"`
 }
 
+func (t *TimelineTrack) cellTypeAt(index int, types ...CellType) bool {
+	if index < 0 || index >= len(t.Cells) {
+		return false
+	}
+	for _, typ := range types {
+		if t.Cells[index].Type == typ {
+			return true
+		}
+	}
+	return false
+}
+
 func (c *TimelineCell) String() string {
 	return fmt.Sprintf("%s/%s@%s:r%d", c.BlockID, c.Event, c.track.ID, c.row)
 }
@@ -86,14 +98,9 @@ func (g exclusiveGroup) satisfied(tracks []*TimelineTrack) bool {
 		if memberTracks[t] {
 			continue
 		}
-		if row >= len(t.Cells) {
-			continue
+		if t.cellTypeAt(row, CellEvent, CellTitle, CellSignal) {
+			return false
 		}
-		c := t.Cells[row]
-		if c.Type != CellEvent && c.Type != CellTitle && c.Type != CellSignal {
-			continue
-		}
-		return false
 	}
 	return true
 }
@@ -302,11 +309,7 @@ func (tl *Timeline) enforceExclusives() bool {
 			if memberTracks[t] {
 				continue
 			}
-			if row >= len(t.Cells) {
-				continue
-			}
-			c := t.Cells[row]
-			if c.Type != CellEvent && c.Type != CellTitle && c.Type != CellSignal {
+			if !t.cellTypeAt(row, CellEvent, CellTitle, CellSignal) {
 				continue
 			}
 			tl.insertGap(t, row)
@@ -324,12 +327,11 @@ func (tl *Timeline) isAllRemovableGapRow(row int, except *TimelineTrack) bool {
 		if row >= len(t.Cells) {
 			continue
 		}
-		c := t.Cells[row]
-		if c.Type != CellGap && c.Type != CellChain && c.Type != CellContinuation {
+		if !t.cellTypeAt(row, CellGap, CellChain, CellContinuation) {
 			return false
 		}
-		hasBefore := row > 0 && (t.Cells[row-1].Type == CellEvent || t.Cells[row-1].Type == CellTitle || t.Cells[row-1].Type == CellSignal)
-		hasAfter := row+1 < len(t.Cells) && (t.Cells[row+1].Type == CellEvent || t.Cells[row+1].Type == CellTitle || t.Cells[row+1].Type == CellSignal)
+		hasBefore := t.cellTypeAt(row-1, CellEvent, CellTitle, CellSignal)
+		hasAfter := t.cellTypeAt(row+1, CellEvent, CellTitle, CellSignal)
 		if hasBefore && hasAfter {
 			return false
 		}

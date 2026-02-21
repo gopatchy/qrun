@@ -28,7 +28,7 @@ type TimelineCell struct {
 	IsTitle  bool           `json:"is_title,omitempty"`
 	IsSignal bool           `json:"is_signal,omitempty"`
 	IsGap    bool           `json:"-"`
-	IsBreak  bool           `json:"-"`
+	IsChain  bool           `json:"-"`
 	row      int            `json:"-"`
 	track    *TimelineTrack `json:"-"`
 }
@@ -84,7 +84,7 @@ func (g exclusiveGroup) satisfied(tracks []*TimelineTrack) bool {
 			continue
 		}
 		c := t.Cells[row]
-		if c.IsGap || c.BlockID == "" {
+		if c.IsGap || c.IsChain || c.BlockID == "" {
 			continue
 		}
 		return false
@@ -212,8 +212,12 @@ func (tl *Timeline) buildCells(endChains map[string]bool) {
 			}
 			tl.cellIdx[cellKey{blockID: c.BlockID, event: c.Event}] = c
 		}
-		if block.Type != "cue" && !endChains[block.ID] && lastOnTrack[block.Track] != block {
-			track.appendCells(&TimelineCell{IsGap: true, IsBreak: true})
+		if block.Type != "cue" && lastOnTrack[block.Track] != block {
+			if endChains[block.ID] {
+				track.appendCells(&TimelineCell{IsChain: true})
+			} else {
+				track.appendCells(&TimelineCell{IsGap: true})
+			}
 		}
 	}
 }
@@ -226,9 +230,7 @@ func (tl *Timeline) buildConstraints() {
 
 		for _, target := range trigger.Targets {
 			t := tl.findCell(target.Block, target.Hook)
-			if source.track == t.track {
-				tl.addConstraint("next_row", source, t)
-			} else {
+			if source.track != t.track {
 				tl.addConstraint("same_row", source, t)
 				source.IsSignal = true
 			}
@@ -299,7 +301,7 @@ func (tl *Timeline) enforceExclusives() bool {
 				continue
 			}
 			c := t.Cells[row]
-			if c.IsGap || c.BlockID == "" {
+			if c.IsGap || c.IsChain || c.BlockID == "" {
 				continue
 			}
 			tl.insertGap(t, row)
@@ -307,23 +309,6 @@ func (tl *Timeline) enforceExclusives() bool {
 		}
 	}
 	return false
-}
-
-func (tl *Timeline) shiftBreakDownOne(track *TimelineTrack, row int) {
-	below := track.Cells[row+1]
-	track.Cells[row].IsBreak = false
-	below.IsBreak = true
-}
-
-func (tl *Timeline) canShiftBreakDownOne(track *TimelineTrack, row int) bool {
-	if row+1 >= len(track.Cells) {
-		return false
-	}
-	below := track.Cells[row+1]
-	if !below.IsGap || below.IsBreak {
-		return false
-	}
-	return true
 }
 
 func (tl *Timeline) isAllRemovableGapRow(row int, except *TimelineTrack) bool {
@@ -335,10 +320,12 @@ func (tl *Timeline) isAllRemovableGapRow(row int, except *TimelineTrack) bool {
 			continue
 		}
 		c := t.Cells[row]
-		if !c.IsGap {
+		if !c.IsGap && !c.IsChain {
 			return false
 		}
-		if c.IsBreak && !tl.canShiftBreakDownOne(t, row) {
+		hasBefore := row > 0 && t.Cells[row-1].BlockID != "" && !t.Cells[row-1].IsGap && !t.Cells[row-1].IsChain
+		hasAfter := row+1 < len(t.Cells) && t.Cells[row+1].BlockID != "" && !t.Cells[row+1].IsGap && !t.Cells[row+1].IsChain
+		if hasBefore && hasAfter {
 			return false
 		}
 	}
@@ -356,24 +343,7 @@ func (tl *Timeline) reindexRowsFrom(track *TimelineTrack, start int) {
 	}
 }
 
-func (tl *Timeline) gapInsertionPoint(track *TimelineTrack, index int) int {
-	for {
-		blocked := false
-		for _, c := range tl.constraints {
-			if c.kind == "next_row" && c.a.track == track && c.b.track == track && c.a.row == index-1 && c.b.row == index {
-				index = c.a.row
-				blocked = true
-				break
-			}
-		}
-		if !blocked {
-			return index
-		}
-	}
-}
-
 func (tl *Timeline) insertGap(track *TimelineTrack, beforeIndex int) {
-	beforeIndex = tl.gapInsertionPoint(track, beforeIndex)
 
 	if tl.isAllRemovableGapRow(beforeIndex, track) {
 		for _, t := range tl.Tracks {
@@ -383,28 +353,17 @@ func (tl *Timeline) insertGap(track *TimelineTrack, beforeIndex int) {
 			if beforeIndex >= len(t.Cells) {
 				continue
 			}
-			c := t.Cells[beforeIndex]
-			if c.IsBreak {
-				tl.shiftBreakDownOne(t, beforeIndex)
-				c = t.Cells[beforeIndex]
-			}
-			if c.IsGap && !c.IsBreak {
-				tl.removeGapAt(t, beforeIndex)
-			}
+			tl.removeGapAt(t, beforeIndex)
 		}
 		return
 	}
 
 	gap := &TimelineCell{IsGap: true, row: beforeIndex, track: track}
-	for i := beforeIndex - 1; i >= 0; i-- {
-		c := track.Cells[i]
-		if c.IsGap {
-			continue
+	if beforeIndex > 0 {
+		prev := track.Cells[beforeIndex-1]
+		if prev.BlockID != "" && !prev.IsEnd {
+			gap.BlockID = prev.BlockID
 		}
-		if c.BlockID != "" && !c.IsEnd {
-			gap.BlockID = c.BlockID
-		}
-		break
 	}
 
 	track.Cells = append(track.Cells[:beforeIndex], append([]*TimelineCell{gap}, track.Cells[beforeIndex:]...)...)

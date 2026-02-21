@@ -187,6 +187,11 @@ func (tl *Timeline) findCell(blockID, event string) *TimelineCell {
 }
 
 func (tl *Timeline) buildCells(endChains map[string]bool) {
+	lastOnTrack := map[string]*Block{}
+	for _, block := range tl.show.Blocks {
+		lastOnTrack[tl.Blocks[block.ID].Track] = block
+	}
+
 	for _, block := range tl.show.Blocks {
 		track := tl.trackIdx[tl.Blocks[block.ID].Track]
 		var cells []*TimelineCell
@@ -197,7 +202,7 @@ func (tl *Timeline) buildCells(endChains map[string]bool) {
 			cells = getBlockCells(block)
 		}
 		track.appendCells(cells...)
-		if block.Type != "cue" && !endChains[block.ID] {
+		if block.Type != "cue" && !endChains[block.ID] && lastOnTrack[block.Track] != block {
 			track.appendCells(&TimelineCell{IsGap: true, IsBreak: true})
 		}
 	}

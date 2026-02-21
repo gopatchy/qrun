@@ -102,16 +102,16 @@ func main() {
 	}
 }
 
-func loadMockShow() (Show, error) {
+func loadMockShow() (*Show, error) {
 	buf, err := staticFS.ReadFile("static/show.json")
 	if err != nil {
-		return Show{}, err
+		return nil, err
 	}
 	var show Show
 	if err := json.Unmarshal(buf, &show); err != nil {
-		return Show{}, err
+		return nil, err
 	}
-	return show, nil
+	return &show, nil
 }
 
 func writeJSON(w http.ResponseWriter, v any) {

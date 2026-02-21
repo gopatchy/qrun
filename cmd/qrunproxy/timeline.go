@@ -7,9 +7,9 @@ const (
 )
 
 type Show struct {
-	Tracks   []Track   `json:"tracks"`
-	Blocks   []Block   `json:"blocks"`
-	Triggers []Trigger `json:"triggers"`
+	Tracks   []*Track   `json:"tracks"`
+	Blocks   []*Block   `json:"blocks"`
+	Triggers []*Trigger `json:"triggers"`
 }
 
 type Track struct {
@@ -41,15 +41,15 @@ type TriggerTarget struct {
 }
 
 type TimelineTrack struct {
-	Track
+	*Track
 	Cells []*TimelineCell `json:"cells"`
 }
 
 type Timeline struct {
-	Tracks []*TimelineTrack  `json:"tracks"`
-	Blocks map[string]Block `json:"blocks"`
+	Tracks []*TimelineTrack   `json:"tracks"`
+	Blocks map[string]*Block  `json:"blocks"`
 
-	show        Show                       `json:"-"`
+	show        *Show                      `json:"-"`
 	trackIdx    map[string]*TimelineTrack  `json:"-"`
 	constraints []constraint               `json:"-"`
 	exclusives  []exclusiveGroup           `json:"-"`
@@ -78,7 +78,7 @@ type exclusiveGroup struct {
 	members []*TimelineCell
 }
 
-func validateShow(show Show) error {
+func validateShow(show *Show) error {
 	startTargeted := map[string]bool{}
 	for _, trigger := range show.Triggers {
 		for _, target := range trigger.Targets {
@@ -100,18 +100,18 @@ func validateShow(show Show) error {
 	return nil
 }
 
-func BuildTimeline(show Show) (Timeline, error) {
+func BuildTimeline(show *Show) (Timeline, error) {
 	if err := validateShow(show); err != nil {
 		return Timeline{}, err
 	}
 
 	tl := Timeline{
 		show:     show,
-		Blocks:   map[string]Block{},
+		Blocks:   map[string]*Block{},
 		trackIdx: map[string]*TimelineTrack{},
 	}
 
-	cueTrack := &TimelineTrack{Track: Track{ID: cueTrackID, Name: "Cue"}}
+	cueTrack := &TimelineTrack{Track: &Track{ID: cueTrackID, Name: "Cue"}}
 	tl.Tracks = append(tl.Tracks, cueTrack)
 	tl.trackIdx[cueTrackID] = cueTrack
 	for _, track := range show.Tracks {
@@ -158,7 +158,7 @@ func (track *TimelineTrack) appendCells(cells ...*TimelineCell) {
 	}
 }
 
-func getCueCells(block Block) []*TimelineCell {
+func getCueCells(block *Block) []*TimelineCell {
 	return []*TimelineCell{{
 		BlockID: block.ID,
 		IsStart: true,
@@ -167,7 +167,7 @@ func getCueCells(block Block) []*TimelineCell {
 	}}
 }
 
-func getBlockCells(block Block) []*TimelineCell {
+func getBlockCells(block *Block) []*TimelineCell {
 	return []*TimelineCell{
 		{BlockID: block.ID, IsStart: true, Event: "START"},
 		{BlockID: block.ID, IsTitle: true},
@@ -187,9 +187,8 @@ func (tl *Timeline) findCell(blockID, event string) *TimelineCell {
 }
 
 func (tl *Timeline) buildCells(endChains map[string]bool) {
-	for _, sb := range tl.show.Blocks {
-		block := tl.Blocks[sb.ID]
-		track := tl.trackIdx[block.Track]
+	for _, block := range tl.show.Blocks {
+		track := tl.trackIdx[tl.Blocks[block.ID].Track]
 		var cells []*TimelineCell
 		switch block.Type {
 		case "cue":

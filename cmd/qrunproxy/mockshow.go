@@ -80,6 +80,7 @@ func GenerateMockShow(numTracks, numCues, numBlocks int) *Show {
 	placed := 0
 	cueIdx := 0
 	scene := 0
+	lastOnTrack := make(map[int]*Block)
 
 	for placed < numBlocks && cueIdx < numCues {
 		scene++
@@ -89,6 +90,7 @@ func GenerateMockShow(numTracks, numCues, numBlocks int) *Show {
 			if placed >= numBlocks || cueIdx >= numCues {
 				break
 			}
+			clear(lastOnTrack)
 
 			cue := &Block{
 				ID:   fmt.Sprintf("q%d", cueIdx),
@@ -129,6 +131,7 @@ func GenerateMockShow(numTracks, numCues, numBlocks int) *Show {
 					prev = next
 					placed++
 				}
+				lastOnTrack[trackIdx] = prev
 			}
 
 			if len(cueTargets) > 0 {
@@ -137,6 +140,27 @@ func GenerateMockShow(numTracks, numCues, numBlocks int) *Show {
 					Targets: cueTargets,
 				})
 			}
+		}
+
+		endTargets := []TriggerTarget{}
+		for _, blk := range lastOnTrack {
+			if blk.hasDefinedTiming() {
+				continue
+			}
+			endTargets = append(endTargets, TriggerTarget{Block: blk.ID, Hook: "END"})
+		}
+		if len(endTargets) > 0 && cueIdx < numCues {
+			endCue := &Block{
+				ID:   fmt.Sprintf("q%d", cueIdx),
+				Type: "cue",
+				Name: fmt.Sprintf("S%d End", scene),
+			}
+			show.Blocks = append(show.Blocks, endCue)
+			cueIdx++
+			show.Triggers = append(show.Triggers, &Trigger{
+				Source:  TriggerSource{Block: endCue.ID, Signal: "GO"},
+				Targets: endTargets,
+			})
 		}
 	}
 

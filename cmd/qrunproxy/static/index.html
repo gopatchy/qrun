@@ -186,7 +186,8 @@ function render(data) {
       div.className = 'cell' + rowCls;
       if (c.is_title) {
         const block = data.blocks[c.block_id] || {};
-        div.innerHTML = `<div class="block block-mid ${block.type || ''}"><div class="title">${block.name || ''}</div></div>`;
+        const loop = block.loop ? ' \u21A9' : '';
+        div.innerHTML = `<div class="block block-mid ${block.type || ''}"><div class="title">${block.name || ''}${loop}</div></div>`;
       } else if (c.block_id) {
         const block = data.blocks[c.block_id] || {};
         const isInfinity = r === numRows - 1 && !c.is_end && !c.is_title;

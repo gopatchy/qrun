@@ -1,69 +1,143 @@
 package main
 
-import "fmt"
+import (
+	"fmt"
+	"math/rand/v2"
+)
+
+var trackNamePool = []string{
+	"Lighting", "Fill Light", "Spots", "Video", "Video OVL",
+	"Audio", "SFX", "Ambience", "Pyro", "Fog", "Motors",
+	"Follow Spot", "Haze", "Projector", "LED Wall",
+}
+
+var lightNamePool = []string{
+	"Wash", "Focus", "Spot", "Amber", "Blue", "Cool", "Warm",
+	"Flood", "Strobe", "Blackout", "Dim", "Bright", "Sunrise",
+}
+
+var mediaNamePool = []string{
+	"Loop", "Projection", "Background", "Overlay", "Flash",
+	"Ambience", "Underscore", "Sting", "Bumper", "Transition",
+}
+
+var delayNamePool = []string{
+	"1s Delay", "2s Delay", "3s Delay", "5s Delay", "Hold",
+}
 
 func GenerateMockShow(numTracks, numCues, numBlocks int) *Show {
-	show := &Show{}
+	rng := rand.New(rand.NewPCG(42, 0))
 
+	show := &Show{}
+	blockIdx := 0
+	nextBlockID := func() string {
+		id := fmt.Sprintf("b%d", blockIdx)
+		blockIdx++
+		return id
+	}
+
+	names := make([]string, len(trackNamePool))
+	copy(names, trackNamePool)
+	rng.Shuffle(len(names), func(i, j int) {
+		names[i], names[j] = names[j], names[i]
+	})
 	for i := range numTracks {
+		name := names[i%len(names)]
+		if i >= len(names) {
+			name = fmt.Sprintf("%s %d", name, i/len(names)+1)
+		}
 		show.Tracks = append(show.Tracks, &Track{
 			ID:   fmt.Sprintf("track_%d", i),
-			Name: fmt.Sprintf("Track %d", i),
+			Name: name,
 		})
 	}
 
-	for i := range numCues {
-		show.Blocks = append(show.Blocks, &Block{
-			ID:   fmt.Sprintf("cue_%d", i),
+	randBlock := func(trackIdx int) *Block {
+		r := rng.Float64()
+		var typ, name string
+		var loop bool
+		switch {
+		case r < 0.30:
+			typ, name = "light", lightNamePool[rng.IntN(len(lightNamePool))]
+		case r < 0.55:
+			typ, name = "media", mediaNamePool[rng.IntN(len(mediaNamePool))]
+		case r < 0.70:
+			typ, name, loop = "media", mediaNamePool[rng.IntN(len(mediaNamePool))], true
+		case r < 0.80:
+			typ, name = "delay", delayNamePool[rng.IntN(len(delayNamePool))]
+		default:
+			typ, name = "light", lightNamePool[rng.IntN(len(lightNamePool))]
+		}
+		return &Block{
+			ID:    nextBlockID(),
+			Type:  typ,
+			Track: fmt.Sprintf("track_%d", trackIdx),
+			Name:  name,
+			Loop:  loop,
+		}
+	}
+
+	placed := 0
+	cueIdx := 0
+
+	for placed < numBlocks && cueIdx < numCues {
+		cue := &Block{
+			ID:   fmt.Sprintf("q%d", cueIdx*10),
 			Type: "cue",
-			Name: fmt.Sprintf("Cue %d", i),
-		})
-	}
-
-	blocksByTrack := make([][]*Block, numTracks)
-	for i := range numBlocks {
-		trackIdx := i % numTracks
-		trackID := fmt.Sprintf("track_%d", trackIdx)
-		block := &Block{
-			ID:    fmt.Sprintf("block_%d_%d", trackIdx, len(blocksByTrack[trackIdx])),
-			Type:  "media",
-			Track: trackID,
-			Name:  fmt.Sprintf("Block %d-%d", trackIdx, len(blocksByTrack[trackIdx])),
+			Name: fmt.Sprintf("Q%d", cueIdx*10),
 		}
-		show.Blocks = append(show.Blocks, block)
-		blocksByTrack[trackIdx] = append(blocksByTrack[trackIdx], block)
-	}
+		show.Blocks = append(show.Blocks, cue)
+		cueIdx++
 
-	for trackIdx := range numTracks {
-		blocks := blocksByTrack[trackIdx]
-		for i := 1; i < len(blocks); i++ {
-			show.Triggers = append(show.Triggers, &Trigger{
-				Source:  TriggerSource{Block: blocks[i-1].ID, Signal: "END"},
-				Targets: []TriggerTarget{{Block: blocks[i].ID, Hook: "START"}},
-			})
-		}
-	}
+		tracksThisCue := numTracks - rng.IntN(2)
+		perm := rng.Perm(numTracks)
 
-	headPerTrack := make([]int, numTracks)
-	for i := range numCues {
-		cue := show.Blocks[i]
-		targets := []TriggerTarget{}
-		for trackIdx := range numTracks {
-			if headPerTrack[trackIdx] >= len(blocksByTrack[trackIdx]) {
-				continue
+		cueTargets := []TriggerTarget{}
+		for _, trackIdx := range perm[:tracksThisCue] {
+			if placed >= numBlocks {
+				break
 			}
-			block := blocksByTrack[trackIdx][headPerTrack[trackIdx]]
-			targets = append(targets, TriggerTarget{Block: block.ID, Hook: "START"})
-			depth := len(blocksByTrack[trackIdx]) - headPerTrack[trackIdx]
-			advance := max(depth/(numCues-i), 1)
-			headPerTrack[trackIdx] += advance
+			block := randBlock(trackIdx)
+			show.Blocks = append(show.Blocks, block)
+			cueTargets = append(cueTargets, TriggerTarget{Block: block.ID, Hook: "START"})
+			placed++
+
+			prev := block
+			chainLen := rng.IntN(3)
+			for range chainLen {
+				if placed >= numBlocks {
+					break
+				}
+				if !prev.hasDefinedTiming() {
+					break
+				}
+				next := randBlock(trackIdx)
+				show.Blocks = append(show.Blocks, next)
+				show.Triggers = append(show.Triggers, &Trigger{
+					Source:  TriggerSource{Block: prev.ID, Signal: "END"},
+					Targets: []TriggerTarget{{Block: next.ID, Hook: "START"}},
+				})
+				prev = next
+				placed++
+			}
 		}
-		if len(targets) > 0 {
+
+		if len(cueTargets) > 0 {
 			show.Triggers = append(show.Triggers, &Trigger{
 				Source:  TriggerSource{Block: cue.ID, Signal: "GO"},
-				Targets: targets,
+				Targets: cueTargets,
 			})
 		}
+	}
+
+	for cueIdx < numCues {
+		cue := &Block{
+			ID:   fmt.Sprintf("q%d", cueIdx*10),
+			Type: "cue",
+			Name: fmt.Sprintf("Q%d", cueIdx*10),
+		}
+		show.Blocks = append(show.Blocks, cue)
+		cueIdx++
 	}
 
 	return show

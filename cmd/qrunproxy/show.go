@@ -36,6 +36,16 @@ type TriggerTarget struct {
 	Hook  string `json:"hook"`
 }
 
+func (block *Block) hasDefinedTiming() bool {
+	if block.Type == "cue" || block.Type == "delay" {
+		return true
+	}
+	if block.Type == "media" && !block.Loop {
+		return true
+	}
+	return false
+}
+
 func isValidEventForBlock(block *Block, event string) bool {
 	if block.Type == "cue" {
 		return event == "GO"
@@ -75,6 +85,11 @@ func (show *Show) Validate() error {
 		}
 	}
 
+	type blockEvent struct {
+		block string
+		event string
+	}
+	hookTargeted := map[blockEvent]bool{}
 	startTargeted := map[string]bool{}
 	for _, trigger := range show.Triggers {
 		sourceBlock := blocksByID[trigger.Source.Block]
@@ -93,6 +108,7 @@ func (show *Show) Validate() error {
 			if !isValidEventForBlock(targetBlock, target.Hook) {
 				return fmt.Errorf("trigger target hook %q is invalid for block %q", target.Hook, target.Block)
 			}
+			hookTargeted[blockEvent{target.Block, target.Hook}] = true
 			if target.Hook == "START" {
 				startTargeted[target.Block] = true
 			}
@@ -105,6 +121,29 @@ func (show *Show) Validate() error {
 		}
 		if !startTargeted[block.ID] {
 			return fmt.Errorf("block %q has no trigger for its START", block.ID)
+		}
+	}
+
+	for _, trigger := range show.Triggers {
+		sourceBlock := blocksByID[trigger.Source.Block]
+		for _, target := range trigger.Targets {
+			targetBlock := blocksByID[target.Block]
+			if sourceBlock.Type != "cue" && targetBlock.Type != "cue" && sourceBlock.Track == targetBlock.Track && target.Hook == "START" && trigger.Source.Signal != "END" {
+				return fmt.Errorf("same-track START trigger from %q to %q must use END signal, not %s", sourceBlock.ID, targetBlock.ID, trigger.Source.Signal)
+			}
+		}
+		if sourceBlock.hasDefinedTiming() {
+			continue
+		}
+		signal := trigger.Source.Signal
+		if signal != "FADE_OUT" && signal != "END" {
+			continue
+		}
+		if signal == "END" && hookTargeted[blockEvent{sourceBlock.ID, "FADE_OUT"}] {
+			continue
+		}
+		if !hookTargeted[blockEvent{sourceBlock.ID, signal}] {
+			return fmt.Errorf("block %q has no defined timing and nothing triggers its %s, so its %s signal will never fire", sourceBlock.ID, signal, signal)
 		}
 	}
 

@@ -1,5 +1,7 @@
 package main
 
+import "fmt"
+
 const cueTrackID = "_cue"
 
 type TimelineTrack struct {
@@ -84,7 +86,9 @@ func BuildTimeline(show *Show) (Timeline, error) {
 
 	tl.buildCells(endChains)
 	tl.buildConstraints()
-	tl.assignRows()
+	if err := tl.assignRows(); err != nil {
+		return Timeline{}, err
+	}
 
 	return tl, nil
 }
@@ -174,16 +178,29 @@ func (tl *Timeline) buildConstraints() {
 	}
 }
 
-func (tl *Timeline) assignRows() {
-	for {
+func (tl *Timeline) assignRows() error {
+	for range 1000000 {
 		if tl.enforceConstraints() {
 			continue
 		}
 		if tl.enforceExclusives() {
 			continue
 		}
-		break
+		return nil
 	}
+	for _, c := range tl.constraints {
+		switch c.kind {
+		case "same_row":
+			if c.a.row != c.b.row {
+				return fmt.Errorf("assignRows: unsatisfied %s constraint: %s/%s (row %d) vs %s/%s (row %d)", c.kind, c.a.BlockID, c.a.Event, c.a.row, c.b.BlockID, c.b.Event, c.b.row)
+			}
+		case "next_row":
+			if c.b.row <= c.a.row {
+				return fmt.Errorf("assignRows: unsatisfied %s constraint: %s/%s (row %d) must follow %s/%s (row %d)", c.kind, c.b.BlockID, c.b.Event, c.b.row, c.a.BlockID, c.a.Event, c.a.row)
+			}
+		}
+	}
+	return fmt.Errorf("assignRows: did not converge")
 }
 
 func (tl *Timeline) enforceConstraints() bool {

@@ -28,12 +28,7 @@ func main() {
 		runAndExit = strings.Fields(*runAndExitStr)
 	}
 
-	show, err := loadMockShow()
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "Error loading show: %v\n", err)
-		os.Exit(1)
-	}
-
+	show := GenerateMockShow(7, 100, 1000)
 	if err := show.Validate(); err != nil {
 		fmt.Fprintf(os.Stderr, "Error validating show: %v\n", err)
 		os.Exit(1)

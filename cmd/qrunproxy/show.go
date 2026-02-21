@@ -1,9 +1,6 @@
 package main
 
-import (
-	"encoding/json"
-	"fmt"
-)
+import "fmt"
 
 type Show struct {
 	Tracks   []*Track   `json:"tracks"`
@@ -37,18 +34,6 @@ type TriggerSource struct {
 type TriggerTarget struct {
 	Block string `json:"block"`
 	Hook  string `json:"hook"`
-}
-
-func loadMockShow() (*Show, error) {
-	buf, err := staticFS.ReadFile("static/show.json")
-	if err != nil {
-		return nil, err
-	}
-	var show Show
-	if err := json.Unmarshal(buf, &show); err != nil {
-		return nil, err
-	}
-	return &show, nil
 }
 
 func isValidEventForBlock(block *Block, event string) bool {

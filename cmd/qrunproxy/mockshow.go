@@ -100,37 +100,28 @@ func GenerateMockShow(numTracks, numCues, numBlocks int) *Show {
 			show.Blocks = append(show.Blocks, cue)
 			cueIdx++
 
-			tracksThisCue := numTracks - rng.IntN(2)
-			perm := rng.Perm(numTracks)
-
+			blocksThisCue := 1 + rng.IntN(numTracks*2)
 			cueTargets := []TriggerTarget{}
-			for _, trackIdx := range perm[:tracksThisCue] {
+			for range blocksThisCue {
 				if placed >= numBlocks {
 					break
 				}
+				trackIdx := rng.IntN(numTracks)
+				if prev := lastOnTrack[trackIdx]; prev != nil && !prev.hasDefinedTiming() {
+					continue
+				}
 				block := randBlock(trackIdx)
 				show.Blocks = append(show.Blocks, block)
-				cueTargets = append(cueTargets, TriggerTarget{Block: block.ID, Hook: "START"})
 				placed++
-
-				lastOnTrack[trackIdx] = block
-				chainLen := rng.IntN(3)
-				for range chainLen {
-					if placed >= numBlocks {
-						break
-					}
-					if !lastOnTrack[trackIdx].hasDefinedTiming() {
-						break
-					}
-					next := randBlock(trackIdx)
-					show.Blocks = append(show.Blocks, next)
+				if prev := lastOnTrack[trackIdx]; prev != nil {
 					show.Triggers = append(show.Triggers, &Trigger{
-						Source:  TriggerSource{Block: lastOnTrack[trackIdx].ID, Signal: "END"},
-						Targets: []TriggerTarget{{Block: next.ID, Hook: "START"}},
+						Source:  TriggerSource{Block: prev.ID, Signal: "END"},
+						Targets: []TriggerTarget{{Block: block.ID, Hook: "START"}},
 					})
-					lastOnTrack[trackIdx] = next
-					placed++
+				} else {
+					cueTargets = append(cueTargets, TriggerTarget{Block: block.ID, Hook: "START"})
 				}
+				lastOnTrack[trackIdx] = block
 			}
 
 			if len(cueTargets) > 0 {

@@ -258,9 +258,6 @@ func (tl *Timeline) enforceConstraints() bool {
 
 func (tl *Timeline) enforceExclusives() bool {
 	for _, g := range tl.exclusives {
-		if len(g.members) == 0 {
-			continue
-		}
 		row := g.members[0].row
 		allAligned := true
 		memberTracks := map[*TimelineTrack]bool{}
@@ -313,20 +310,24 @@ func (tl *Timeline) removeGapAt(track *TimelineTrack, index int) {
 	}
 }
 
-func (tl *Timeline) insertGap(track *TimelineTrack, beforeIndex int) {
+func (tl *Timeline) gapInsertionPoint(track *TimelineTrack, index int) int {
 	for {
 		blocked := false
 		for _, c := range tl.constraints {
-			if c.kind == "next_row" && c.a.track == track && c.b.track == track && c.a.row == beforeIndex-1 && c.b.row == beforeIndex {
-				beforeIndex = c.a.row
+			if c.kind == "next_row" && c.a.track == track && c.b.track == track && c.a.row == index-1 && c.b.row == index {
+				index = c.a.row
 				blocked = true
 				break
 			}
 		}
 		if !blocked {
-			break
+			return index
 		}
 	}
+}
+
+func (tl *Timeline) insertGap(track *TimelineTrack, beforeIndex int) {
+	beforeIndex = tl.gapInsertionPoint(track, beforeIndex)
 
 	if tl.isAllGapRow(beforeIndex, track) {
 		for _, t := range tl.Tracks {

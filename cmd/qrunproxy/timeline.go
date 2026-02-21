@@ -2,9 +2,7 @@ package main
 
 import "fmt"
 
-const (
-	cueTrackID = "_cue"
-)
+const cueTrackID = "_cue"
 
 type Show struct {
 	Tracks   []*Track   `json:"tracks"`
@@ -189,11 +187,11 @@ func (tl *Timeline) findCell(blockID, event string) *TimelineCell {
 func (tl *Timeline) buildCells(endChains map[string]bool) {
 	lastOnTrack := map[string]*Block{}
 	for _, block := range tl.show.Blocks {
-		lastOnTrack[tl.Blocks[block.ID].Track] = block
+		lastOnTrack[block.Track] = block
 	}
 
 	for _, block := range tl.show.Blocks {
-		track := tl.trackIdx[tl.Blocks[block.ID].Track]
+		track := tl.trackIdx[block.Track]
 		var cells []*TimelineCell
 		switch block.Type {
 		case "cue":

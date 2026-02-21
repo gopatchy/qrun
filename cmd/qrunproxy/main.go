@@ -34,6 +34,11 @@ func main() {
 		os.Exit(1)
 	}
 
+	if err := show.Validate(); err != nil {
+		fmt.Fprintf(os.Stderr, "Error validating show: %v\n", err)
+		os.Exit(1)
+	}
+
 	timeline, err := BuildTimeline(show)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "Error building timeline: %v\n", err)

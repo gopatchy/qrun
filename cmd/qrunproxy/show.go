@@ -63,7 +63,7 @@ func isValidEventForBlock(block *Block, event string) bool {
 	}
 }
 
-func (show *Show) validate() error {
+func (show *Show) Validate() error {
 	if show == nil {
 		return fmt.Errorf("show is nil")
 	}

@@ -47,10 +47,6 @@ type cellKey struct {
 }
 
 func BuildTimeline(show *Show) (Timeline, error) {
-	if err := show.validate(); err != nil {
-		return Timeline{}, err
-	}
-
 	tl := Timeline{
 		show:     show,
 		Blocks:   map[string]*Block{},

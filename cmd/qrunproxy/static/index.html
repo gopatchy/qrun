@@ -181,13 +181,17 @@ function render(data) {
     const hasSignal = !hasCue && cells.some(c => c.event && c.is_signal);
     const rowCls = hasCue ? ' cue-row' : (hasSignal ? ' sig-row' : '');
 
-    cells.forEach(c => {
+    cells.forEach((c, ti) => {
       const div = document.createElement('div');
       div.className = 'cell' + rowCls;
       if (c.is_title) {
         const block = data.blocks[c.block_id] || {};
         const loop = block.loop ? ' \u21A9' : '';
         div.innerHTML = `<div class="block block-mid ${block.type || ''}"><div class="title">${block.name || ''}${loop}</div></div>`;
+      } else if (c.is_chain) {
+        const nextCell = data.tracks[ti]?.cells[r+1] || {};
+        const sym = nextCell.is_start ? '\u2193' : '\u2502';
+        div.innerHTML = `<div style="text-align:center;color:var(--fg-dim);font-size:14px;line-height:24px">${sym}</div>`;
       } else if (c.block_id) {
         const block = data.blocks[c.block_id] || {};
         const isInfinity = r === numRows - 1 && !c.is_end && !c.is_title;

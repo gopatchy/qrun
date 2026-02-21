@@ -28,7 +28,7 @@ type TimelineCell struct {
 	IsTitle  bool           `json:"is_title,omitempty"`
 	IsSignal bool           `json:"is_signal,omitempty"`
 	IsGap    bool           `json:"-"`
-	IsChain  bool           `json:"-"`
+	IsChain  bool           `json:"is_chain,omitempty"`
 	row      int            `json:"-"`
 	track    *TimelineTrack `json:"-"`
 }

@@ -20,15 +20,21 @@ type Timeline struct {
 	exclusives  []exclusiveGroup          `json:"-"`
 }
 
+type CellType string
+
+const (
+	CellEvent        CellType = "event"
+	CellTitle        CellType = "title"
+	CellContinuation CellType = "continuation"
+	CellGap          CellType = "gap"
+	CellChain        CellType = "chain"
+	CellSignal       CellType = "signal"
+)
+
 type TimelineCell struct {
+	Type     CellType       `json:"type"`
 	BlockID  string         `json:"block_id,omitempty"`
-	IsStart  bool           `json:"is_start,omitempty"`
-	IsEnd    bool           `json:"is_end,omitempty"`
 	Event    string         `json:"event,omitempty"`
-	IsTitle  bool           `json:"is_title,omitempty"`
-	IsSignal bool           `json:"is_signal,omitempty"`
-	IsGap    bool           `json:"-"`
-	IsChain  bool           `json:"is_chain,omitempty"`
 	row      int            `json:"-"`
 	track    *TimelineTrack `json:"-"`
 }
@@ -84,7 +90,7 @@ func (g exclusiveGroup) satisfied(tracks []*TimelineTrack) bool {
 			continue
 		}
 		c := t.Cells[row]
-		if c.IsGap || c.IsChain || c.BlockID == "" {
+		if c.Type != CellEvent && c.Type != CellTitle && c.Type != CellSignal {
 			continue
 		}
 		return false
@@ -167,19 +173,18 @@ func (track *TimelineTrack) appendCells(cells ...*TimelineCell) {
 
 func getCueCells(block *Block) []*TimelineCell {
 	return []*TimelineCell{{
+		Type:    CellEvent,
 		BlockID: block.ID,
-		IsStart: true,
-		IsEnd:   true,
 		Event:   "GO",
 	}}
 }
 
 func getBlockCells(block *Block) []*TimelineCell {
 	return []*TimelineCell{
-		{BlockID: block.ID, IsStart: true, Event: "START"},
-		{BlockID: block.ID, IsTitle: true},
-		{BlockID: block.ID, Event: "FADE_OUT"},
-		{BlockID: block.ID, IsEnd: true, Event: "END"},
+		{Type: CellEvent, BlockID: block.ID, Event: "START"},
+		{Type: CellTitle, BlockID: block.ID},
+		{Type: CellEvent, BlockID: block.ID, Event: "FADE_OUT"},
+		{Type: CellEvent, BlockID: block.ID, Event: "END"},
 	}
 }
 
@@ -214,9 +219,9 @@ func (tl *Timeline) buildCells(endChains map[string]bool) {
 		}
 		if block.Type != "cue" && lastOnTrack[block.Track] != block {
 			if endChains[block.ID] {
-				track.appendCells(&TimelineCell{IsChain: true})
+				track.appendCells(&TimelineCell{Type: CellChain})
 			} else {
-				track.appendCells(&TimelineCell{IsGap: true})
+				track.appendCells(&TimelineCell{Type: CellGap})
 			}
 		}
 	}
@@ -232,7 +237,7 @@ func (tl *Timeline) buildConstraints() {
 			t := tl.findCell(target.Block, target.Hook)
 			if source.track != t.track {
 				tl.addConstraint("same_row", source, t)
-				source.IsSignal = true
+				source.Type = CellSignal
 			}
 			group.members = append(group.members, t)
 		}
@@ -301,7 +306,7 @@ func (tl *Timeline) enforceExclusives() bool {
 				continue
 			}
 			c := t.Cells[row]
-			if c.IsGap || c.IsChain || c.BlockID == "" {
+			if c.Type != CellEvent && c.Type != CellTitle && c.Type != CellSignal {
 				continue
 			}
 			tl.insertGap(t, row)
@@ -320,11 +325,11 @@ func (tl *Timeline) isAllRemovableGapRow(row int, except *TimelineTrack) bool {
 			continue
 		}
 		c := t.Cells[row]
-		if !c.IsGap && !c.IsChain {
+		if c.Type != CellGap && c.Type != CellChain && c.Type != CellContinuation {
 			return false
 		}
-		hasBefore := row > 0 && t.Cells[row-1].BlockID != "" && !t.Cells[row-1].IsGap && !t.Cells[row-1].IsChain
-		hasAfter := row+1 < len(t.Cells) && t.Cells[row+1].BlockID != "" && !t.Cells[row+1].IsGap && !t.Cells[row+1].IsChain
+		hasBefore := row > 0 && (t.Cells[row-1].Type == CellEvent || t.Cells[row-1].Type == CellTitle || t.Cells[row-1].Type == CellSignal)
+		hasAfter := row+1 < len(t.Cells) && (t.Cells[row+1].Type == CellEvent || t.Cells[row+1].Type == CellTitle || t.Cells[row+1].Type == CellSignal)
 		if hasBefore && hasAfter {
 			return false
 		}
@@ -358,10 +363,11 @@ func (tl *Timeline) insertGap(track *TimelineTrack, beforeIndex int) {
 		return
 	}
 
-	gap := &TimelineCell{IsGap: true, row: beforeIndex, track: track}
+	gap := &TimelineCell{Type: CellGap, row: beforeIndex, track: track}
 	if beforeIndex > 0 {
 		prev := track.Cells[beforeIndex-1]
-		if prev.BlockID != "" && !prev.IsEnd {
+		if prev.BlockID != "" && prev.Event != "END" && prev.Event != "GO" {
+			gap.Type = CellContinuation
 			gap.BlockID = prev.BlockID
 		}
 	}

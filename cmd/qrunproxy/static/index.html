@@ -177,28 +177,28 @@ function render(data) {
 
   for (let r = 0; r < numRows; r++) {
     const cells = data.tracks.map(t => t.cells[r] || {});
-    const hasCue = cells.some(c => c.block_id && c.event && (data.blocks[c.block_id] || {}).type === 'cue');
-    const hasSignal = !hasCue && cells.some(c => c.event && c.is_signal);
+    const hasCue = cells.some(c => (c.type === 'event' || c.type === 'signal') && c.block_id && (data.blocks[c.block_id] || {}).type === 'cue');
+    const hasSignal = !hasCue && cells.some(c => c.type === 'signal');
     const rowCls = hasCue ? ' cue-row' : (hasSignal ? ' sig-row' : '');
 
     cells.forEach((c, ti) => {
       const div = document.createElement('div');
       div.className = 'cell' + rowCls;
-      if (c.is_title) {
+      if (c.type === 'title') {
         const block = data.blocks[c.block_id] || {};
         const loop = block.loop ? ' \u21A9' : '';
         div.innerHTML = `<div class="block block-mid ${block.type || ''}"><div class="title">${block.name || ''}${loop}</div></div>`;
-      } else if (c.is_chain) {
+      } else if (c.type === 'chain') {
         const nextCell = data.tracks[ti]?.cells[r+1] || {};
-        const sym = nextCell.is_start ? '\u2193' : '\u2502';
+        const sym = nextCell.event === 'START' ? '\u2193' : '\u2502';
         div.innerHTML = `<div style="text-align:center;color:var(--fg-dim);font-size:14px;line-height:24px">${sym}</div>`;
-      } else if (c.block_id) {
+      } else if (c.type === 'event' || c.type === 'signal') {
         const block = data.blocks[c.block_id] || {};
-        const isInfinity = r === numRows - 1 && !c.is_end && !c.is_title;
+        const isInfinity = r === numRows - 1 && c.event !== 'END' && c.event !== 'GO';
         let seg = 'mid';
-        if (c.is_start && c.is_end) seg = 'single';
-        else if (c.is_start) seg = 'start';
-        else if (c.is_end) seg = 'end';
+        if (c.event === 'GO') seg = 'single';
+        else if (c.event === 'START') seg = 'start';
+        else if (c.event === 'END') seg = 'end';
 
         div.className += isInfinity ? ' infinity-cell' : '';
         let inner = `<div class="block block-${seg} ${block.type || ''}">`;
@@ -206,12 +206,15 @@ function render(data) {
           inner += `<div class="cue-label">${block.name || ''}</div>`;
         } else if (c.event) {
           let hCls = 'hook';
-          if (c.is_signal) hCls += ' sig';
+          if (c.type === 'signal') hCls += ' sig';
           inner += `<div class="${hCls}">${c.event.replace('_', ' ')}</div>`;
         }
         inner += `</div>`;
         if (isInfinity) inner += `<div class="infinity-marker">&#x223F;&#x223F;&#x223F;</div>`;
         div.innerHTML = inner;
+      } else if (c.type === 'continuation') {
+        const block = data.blocks[c.block_id] || {};
+        div.innerHTML = `<div class="block block-mid ${block.type || ''}"></div>`;
       }
       timeline.appendChild(div);
     });

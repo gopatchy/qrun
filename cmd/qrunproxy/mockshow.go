@@ -45,7 +45,7 @@ type mockShowGen struct {
 
 func GenerateMockShow(numTracks, numScenes, avgCuesPerScene, avgBlocksPerCue int) *Show {
 	g := &mockShowGen{
-		rng:        rand.New(rand.NewPCG(42, 0)),
+		rng:        rand.New(rand.NewPCG(rand.Uint64(), rand.Uint64())),
 		show:       &Show{},
 		numTracks:  numTracks,
 		triggerIdx: map[TriggerSource]*Trigger{},

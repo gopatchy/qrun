@@ -89,20 +89,19 @@ func (c constraint) String() string {
 }
 
 type exclusiveGroup struct {
-	members []*TimelineCell
+	members      []*TimelineCell
+	memberTracks map[*TimelineTrack]bool
 }
 
 func (g exclusiveGroup) satisfied(tracks []*TimelineTrack) bool {
 	row := g.members[0].row
-	memberTracks := map[*TimelineTrack]bool{}
 	for _, m := range g.members {
-		memberTracks[m.track] = true
 		if m.row != row {
 			return true
 		}
 	}
 	for _, t := range tracks {
-		if memberTracks[t] {
+		if g.memberTracks[t] {
 			continue
 		}
 		if t.cellTypeAt(row, CellEvent, CellTitle, CellSignal) {
@@ -245,7 +244,10 @@ func (tl *Timeline) buildConstraints() {
 	for _, trigger := range tl.show.Triggers {
 		source := tl.findCell(trigger.Source.Block, trigger.Source.Signal)
 
-		group := exclusiveGroup{members: []*TimelineCell{source}}
+		group := exclusiveGroup{
+			members:      []*TimelineCell{source},
+			memberTracks: map[*TimelineTrack]bool{source.track: true},
+		}
 
 		for _, target := range trigger.Targets {
 			t := tl.findCell(target.Block, target.Hook)
@@ -254,6 +256,7 @@ func (tl *Timeline) buildConstraints() {
 				source.Type = CellSignal
 			}
 			group.members = append(group.members, t)
+			group.memberTracks[t.track] = true
 		}
 		tl.exclusives = append(tl.exclusives, group)
 	}
@@ -308,12 +311,8 @@ func (tl *Timeline) enforceExclusives() bool {
 			continue
 		}
 		row := g.members[0].row
-		memberTracks := map[*TimelineTrack]bool{}
-		for _, m := range g.members {
-			memberTracks[m.track] = true
-		}
 		for _, t := range tl.Tracks {
-			if memberTracks[t] {
+			if g.memberTracks[t] {
 				continue
 			}
 			if !t.cellTypeAt(row, CellEvent, CellTitle, CellSignal) {

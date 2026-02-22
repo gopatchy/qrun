@@ -82,6 +82,7 @@ func GenerateMockShow(numTracks, numScenes, avgCuesPerScene, avgBlocksPerCue int
 		block         *Block
 		trackIdx      int
 		sameTrackOnly bool
+		fromEnded     bool
 	}
 
 	triggerIdx := map[TriggerSource]*Trigger{}
@@ -117,22 +118,19 @@ func GenerateMockShow(numTracks, numScenes, avgCuesPerScene, avgBlocksPerCue int
 					hook = "FADE_OUT"
 				}
 				cueTargets = append(cueTargets, TriggerTarget{Block: blk.ID, Hook: hook})
-				chainFrom = append(chainFrom, chainable{block: blk, trackIdx: trackIdx, sameTrackOnly: true})
+				chainFrom = append(chainFrom, chainable{block: blk, trackIdx: trackIdx, sameTrackOnly: true, fromEnded: true})
 				delete(needsEnd, trackIdx)
 			}
 
-			usedTracks := map[int]bool{}
-			var newChainFrom []chainable
 			blocksThisCue := 1 + rng.IntN(avgBlocksPerCue*2)
 			for range blocksThisCue {
 				trackIdx := rng.IntN(numTracks)
-				if usedTracks[trackIdx] {
+				if needsEnd[trackIdx] != nil {
 					continue
 				}
 
 				block := randBlock(trackIdx)
 				show.Blocks = append(show.Blocks, block)
-				usedTracks[trackIdx] = true
 
 				triggered := false
 				for i, c := range chainFrom {
@@ -171,11 +169,18 @@ func GenerateMockShow(numTracks, numScenes, avgCuesPerScene, avgBlocksPerCue int
 				if !block.hasDefinedTiming() {
 					needsEnd[trackIdx] = block
 				} else {
-					newChainFrom = append(newChainFrom, chainable{block: block, trackIdx: trackIdx})
+					chainFrom = append(chainFrom, chainable{block: block, trackIdx: trackIdx, sameTrackOnly: true})
 				}
 			}
 
-			chainFrom = newChainFrom
+			filtered := chainFrom[:0]
+			for _, c := range chainFrom {
+				if !c.fromEnded {
+					c.sameTrackOnly = false
+					filtered = append(filtered, c)
+				}
+			}
+			chainFrom = filtered
 
 			if len(cueTargets) > 0 {
 				show.Triggers = append(show.Triggers, &Trigger{

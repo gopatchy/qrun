@@ -125,7 +125,10 @@ func (show *Show) Validate() error {
 		}
 
 		if t, ok := signalTargetedBy[blockEvent{trigger.Source.Block, trigger.Source.Signal}]; ok {
-			return fmt.Errorf("trigger conflict: %s vs %s", t, trigger)
+			sameTrackSingle := len(trigger.Targets) == 1 && blocksByID[trigger.Targets[0].Block].Track == sourceBlock.Track
+			if !sameTrackSingle {
+				return fmt.Errorf("trigger conflict: %s vs %s", t, trigger)
+			}
 		}
 		if !isValidEventForBlock(sourceBlock, trigger.Source.Signal) {
 			return fmt.Errorf("trigger source signal %q is invalid for block %q", trigger.Source.Signal, trigger.Source.Block)

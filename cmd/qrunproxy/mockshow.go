@@ -79,8 +79,9 @@ func GenerateMockShow(numTracks, numScenes, avgCuesPerScene, avgBlocksPerCue int
 	}
 
 	type chainable struct {
-		block    *Block
-		trackIdx int
+		block         *Block
+		trackIdx      int
+		sameTrackOnly bool
 	}
 
 	triggerIdx := map[TriggerSource]*Trigger{}
@@ -110,10 +111,13 @@ func GenerateMockShow(numTracks, numScenes, avgCuesPerScene, avgBlocksPerCue int
 			show.Blocks = append(show.Blocks, cue)
 
 			cueTargets := []TriggerTarget{}
-
-			endingTracks := map[int]*Block{}
 			for trackIdx, blk := range needsEnd {
-				endingTracks[trackIdx] = blk
+				hook := "END"
+				if rng.Float64() < 0.3 {
+					hook = "FADE_OUT"
+				}
+				cueTargets = append(cueTargets, TriggerTarget{Block: blk.ID, Hook: hook})
+				chainFrom = append(chainFrom, chainable{block: blk, trackIdx: trackIdx, sameTrackOnly: true})
 				delete(needsEnd, trackIdx)
 			}
 
@@ -122,7 +126,7 @@ func GenerateMockShow(numTracks, numScenes, avgCuesPerScene, avgBlocksPerCue int
 			blocksThisCue := 1 + rng.IntN(avgBlocksPerCue*2)
 			for range blocksThisCue {
 				trackIdx := rng.IntN(numTracks)
-				if needsEnd[trackIdx] != nil || usedTracks[trackIdx] {
+				if usedTracks[trackIdx] {
 					continue
 				}
 
@@ -131,37 +135,34 @@ func GenerateMockShow(numTracks, numScenes, avgCuesPerScene, avgBlocksPerCue int
 				usedTracks[trackIdx] = true
 
 				triggered := false
-				if prev := endingTracks[trackIdx]; prev != nil {
-					cueTargets = append(cueTargets, TriggerTarget{Block: prev.ID, Hook: "FADE_OUT"})
-					addTrigger(
-						TriggerSource{Block: prev.ID, Signal: "END"},
-						TriggerTarget{Block: block.ID, Hook: "START"},
-					)
-					delete(endingTracks, trackIdx)
-					triggered = true
-				}
-				if !triggered {
-					for i, c := range chainFrom {
-						if c.trackIdx == trackIdx {
-							addTrigger(
-								TriggerSource{Block: c.block.ID, Signal: "END"},
-								TriggerTarget{Block: block.ID, Hook: "START"},
-							)
-							chainFrom = append(chainFrom[:i], chainFrom[i+1:]...)
-							triggered = true
-							break
-						}
+				for i, c := range chainFrom {
+					if c.trackIdx == trackIdx {
+						addTrigger(
+							TriggerSource{Block: c.block.ID, Signal: "END"},
+							TriggerTarget{Block: block.ID, Hook: "START"},
+						)
+						chainFrom = append(chainFrom[:i], chainFrom[i+1:]...)
+						triggered = true
+						break
 					}
 				}
-				if !triggered && rng.Float64() < 0.3 && len(chainFrom) > 0 {
-					idx := rng.IntN(len(chainFrom))
-					c := chainFrom[idx]
-					addTrigger(
-						TriggerSource{Block: c.block.ID, Signal: "END"},
-						TriggerTarget{Block: block.ID, Hook: "START"},
-					)
-					chainFrom = append(chainFrom[:idx], chainFrom[idx+1:]...)
-					triggered = true
+				if !triggered && rng.Float64() < 0.3 {
+					var candidates []int
+					for i, c := range chainFrom {
+						if !c.sameTrackOnly {
+							candidates = append(candidates, i)
+						}
+					}
+					if len(candidates) > 0 {
+						idx := candidates[rng.IntN(len(candidates))]
+						c := chainFrom[idx]
+						addTrigger(
+							TriggerSource{Block: c.block.ID, Signal: "END"},
+							TriggerTarget{Block: block.ID, Hook: "START"},
+						)
+						chainFrom = append(chainFrom[:idx], chainFrom[idx+1:]...)
+						triggered = true
+					}
 				}
 				if !triggered {
 					cueTargets = append(cueTargets, TriggerTarget{Block: block.ID, Hook: "START"})
@@ -171,17 +172,6 @@ func GenerateMockShow(numTracks, numScenes, avgCuesPerScene, avgBlocksPerCue int
 					needsEnd[trackIdx] = block
 				} else {
 					newChainFrom = append(newChainFrom, chainable{block: block, trackIdx: trackIdx})
-				}
-			}
-
-			for trackIdx, blk := range endingTracks {
-				hook := "END"
-				if rng.Float64() < 0.3 {
-					hook = "FADE_OUT"
-				}
-				cueTargets = append(cueTargets, TriggerTarget{Block: blk.ID, Hook: hook})
-				if hook == "FADE_OUT" {
-					newChainFrom = append(newChainFrom, chainable{block: blk, trackIdx: trackIdx})
 				}
 			}
 

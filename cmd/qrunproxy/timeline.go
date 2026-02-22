@@ -312,15 +312,16 @@ func (tl *Timeline) enforceExclusives() bool {
 		}
 		row := g.members[0].row
 		for _, t := range tl.Tracks {
+			if row >= len(t.Cells) {
+				continue
+			}
 			if g.memberTracks[t] {
-				continue
+				tl.insertGapInt(t, row)
+			} else {
+				tl.insertGapInt(t, row+1)
 			}
-			if !t.cellTypeAt(row, CellEvent, CellTitle, CellSignal) {
-				continue
-			}
-			tl.insertGap(t, row)
-			return true
 		}
+		return true
 	}
 	return false
 }
@@ -369,7 +370,10 @@ func (tl *Timeline) insertGap(track *TimelineTrack, beforeIndex int) {
 		}
 		return
 	}
+	tl.insertGapInt(track, beforeIndex)
+}
 
+func (tl *Timeline) insertGapInt(track *TimelineTrack, beforeIndex int) {
 	gap := &TimelineCell{Type: CellGap, row: beforeIndex, track: track}
 	if beforeIndex > 0 {
 		prev := track.Cells[beforeIndex-1]

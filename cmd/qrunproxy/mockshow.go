@@ -106,7 +106,11 @@ func GenerateMockShow(numTracks, numScenes, avgCuesPerScene, avgBlocksPerCue int
 			blocksThisCue := 1 + rng.IntN(avgBlocksPerCue*2)
 			cueTargets := []TriggerTarget{}
 			for id, blk := range needsEnd {
-				cueTargets = append(cueTargets, TriggerTarget{Block: blk.ID, Hook: "END"})
+				hook := "END"
+				if rng.Float64() < 0.3 {
+					hook = "FADE_OUT"
+				}
+				cueTargets = append(cueTargets, TriggerTarget{Block: blk.ID, Hook: hook})
 				delete(needsEnd, id)
 				for ti := range numTracks {
 					if chainFromByTrack[ti] == blk {
@@ -147,7 +151,11 @@ func GenerateMockShow(numTracks, numScenes, avgCuesPerScene, avgBlocksPerCue int
 
 		endTargets := []TriggerTarget{}
 		for id, blk := range needsEnd {
-			endTargets = append(endTargets, TriggerTarget{Block: blk.ID, Hook: "END"})
+			hook := "END"
+			if rng.Float64() < 0.3 {
+				hook = "FADE_OUT"
+			}
+			endTargets = append(endTargets, TriggerTarget{Block: blk.ID, Hook: hook})
 			delete(needsEnd, id)
 			for ti := range numTracks {
 				if chainFromByTrack[ti] == blk {

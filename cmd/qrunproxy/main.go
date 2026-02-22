@@ -28,7 +28,7 @@ func main() {
 		runAndExit = strings.Fields(*runAndExitStr)
 	}
 
-	show := GenerateMockShow(5, 3, 3, 5)
+	show := GenerateMockShow(5, 20, 4, 5)
 	if err := show.Validate(); err != nil {
 		fmt.Fprintf(os.Stderr, "Error validating show: %v\n", err)
 		os.Exit(1)

@@ -55,30 +55,34 @@ func (c *TimelineCell) String() string {
 	return fmt.Sprintf("%s/%s@%s:r%d", c.BlockID, c.Event, c.track.ID, c.row)
 }
 
+type constraintKind string
+
+const (
+	constraintSameRow constraintKind = "same_row"
+)
+
 type constraint struct {
-	kind string
+	kind constraintKind
 	a    *TimelineCell
 	b    *TimelineCell
 }
 
 func (c constraint) satisfied() bool {
 	switch c.kind {
-	case "same_row":
+	case constraintSameRow:
 		return c.a.row == c.b.row
-	case "next_row":
-		return c.b.row > c.a.row
+	default:
+		panic("invalid constraint kind: " + string(c.kind))
 	}
-	return true
 }
 
 func (c constraint) String() string {
 	switch c.kind {
-	case "same_row":
+	case constraintSameRow:
 		return fmt.Sprintf("same_row(%s, %s)", c.a, c.b)
-	case "next_row":
-		return fmt.Sprintf("next_row(%s -> %s)", c.a, c.b)
+	default:
+		panic("invalid constraint kind: " + string(c.kind))
 	}
-	return fmt.Sprintf("%s(%s, %s)", c.kind, c.a, c.b)
 }
 
 type exclusiveGroup struct {
@@ -166,7 +170,7 @@ func BuildTimeline(show *Show) (Timeline, error) {
 	return tl, nil
 }
 
-func (tl *Timeline) addConstraint(kind string, a, b *TimelineCell) {
+func (tl *Timeline) addConstraint(kind constraintKind, a, b *TimelineCell) {
 	tl.constraints = append(tl.constraints, constraint{kind: kind, a: a, b: b})
 }
 
@@ -243,7 +247,7 @@ func (tl *Timeline) buildConstraints() {
 		for _, target := range trigger.Targets {
 			t := tl.findCell(target.Block, target.Hook)
 			if source.track != t.track {
-				tl.addConstraint("same_row", source, t)
+				tl.addConstraint(constraintSameRow, source, t)
 				source.Type = CellSignal
 			}
 			group.members = append(group.members, t)
@@ -281,14 +285,14 @@ func (tl *Timeline) enforceConstraints() bool {
 			continue
 		}
 		switch c.kind {
-		case "same_row":
+		case constraintSameRow:
 			if c.a.row < c.b.row {
 				tl.insertGap(c.a.track, c.a.row)
 			} else {
 				tl.insertGap(c.b.track, c.b.row)
 			}
-		case "next_row":
-			tl.insertGap(c.b.track, c.b.row)
+		default:
+			panic("invalid constraint kind: " + string(c.kind))
 		}
 		return true
 	}

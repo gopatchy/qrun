@@ -26,6 +26,14 @@ type Trigger struct {
 	Targets []TriggerTarget `json:"targets"`
 }
 
+func (t *Trigger) String() string {
+	s := fmt.Sprintf("%s/%s ->", t.Source.Block, t.Source.Signal)
+	for _, target := range t.Targets {
+		s += fmt.Sprintf(" %s/%s", target.Block, target.Hook)
+	}
+	return s
+}
+
 type TriggerSource struct {
 	Block  string `json:"block"`
 	Signal string `json:"signal"`
@@ -92,10 +100,32 @@ func (show *Show) Validate() error {
 	hookTargeted := map[blockEvent]bool{}
 	startTargeted := map[string]bool{}
 	sourceUsed := map[blockEvent]bool{}
+	signalTargetedBy := map[blockEvent]*Trigger{}
+
+	for _, trigger := range show.Triggers {
+		for _, target := range trigger.Targets {
+			signalTargetedBy[blockEvent{target.Block, target.Hook}] = trigger
+		}
+	}
+
 	for _, trigger := range show.Triggers {
 		sourceBlock := blocksByID[trigger.Source.Block]
 		if sourceBlock == nil {
 			return fmt.Errorf("trigger source block %q not found", trigger.Source.Block)
+		}
+
+		targetedTracks := map[string]string{}
+		for _, target := range trigger.Targets {
+			targetBlock := blocksByID[target.Block]
+			if prev, ok := targetedTracks[targetBlock.Track]; ok {
+				return fmt.Errorf("trigger conflict: %s targets multiple blocks on track %q (%q and %q)",
+					trigger, targetBlock.Track, prev, target.Block)
+			}
+			targetedTracks[targetBlock.Track] = target.Block
+		}
+
+		if t, ok := signalTargetedBy[blockEvent{trigger.Source.Block, trigger.Source.Signal}]; ok {
+			return fmt.Errorf("trigger conflict: %s vs %s", t, trigger)
 		}
 		if !isValidEventForBlock(sourceBlock, trigger.Source.Signal) {
 			return fmt.Errorf("trigger source signal %q is invalid for block %q", trigger.Source.Signal, trigger.Source.Block)

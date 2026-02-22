@@ -80,9 +80,20 @@ func GenerateMockShow(numTracks, numScenes, avgCuesPerScene, avgBlocksPerCue int
 
 	chainFromByTrack := make(map[int]*Block)
 	needsEnd := make(map[string]*Block)
+	triggerIdx := make(map[TriggerSource]*Trigger)
 	allowedTracks := make(map[int]bool, numTracks)
 	for i := range numTracks {
 		allowedTracks[i] = true
+	}
+
+	addTrigger := func(source TriggerSource, target TriggerTarget) {
+		if t := triggerIdx[source]; t != nil {
+			t.Targets = append(t.Targets, target)
+			return
+		}
+		t := &Trigger{Source: source, Targets: []TriggerTarget{target}}
+		show.Triggers = append(show.Triggers, t)
+		triggerIdx[source] = t
 	}
 
 	for scene := 1; scene <= numScenes; scene++ {
@@ -126,11 +137,27 @@ func GenerateMockShow(numTracks, numScenes, avgCuesPerScene, avgBlocksPerCue int
 				block := randBlock(trackIdx)
 				show.Blocks = append(show.Blocks, block)
 				if prev := chainFromByTrack[trackIdx]; prev != nil {
-					show.Triggers = append(show.Triggers, &Trigger{
-						Source:  TriggerSource{Block: prev.ID, Signal: "END"},
-						Targets: []TriggerTarget{{Block: block.ID, Hook: "START"}},
-					})
+					addTrigger(
+						TriggerSource{Block: prev.ID, Signal: "END"},
+						TriggerTarget{Block: block.ID, Hook: "START"},
+					)
 					delete(needsEnd, prev.ID)
+				} else if rng.Float64() < 0.3 {
+					var crossSrc *Block
+					for ti, blk := range chainFromByTrack {
+						if ti != trackIdx && blk != nil && needsEnd[blk.ID] == nil {
+							crossSrc = blk
+							break
+						}
+					}
+					if crossSrc != nil {
+						addTrigger(
+							TriggerSource{Block: crossSrc.ID, Signal: "END"},
+							TriggerTarget{Block: block.ID, Hook: "START"},
+						)
+					} else {
+						cueTargets = append(cueTargets, TriggerTarget{Block: block.ID, Hook: "START"})
+					}
 				} else {
 					cueTargets = append(cueTargets, TriggerTarget{Block: block.ID, Hook: "START"})
 				}

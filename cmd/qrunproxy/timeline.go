@@ -257,12 +257,15 @@ func (tl *Timeline) buildConstraints() {
 }
 
 func (tl *Timeline) assignRows() error {
-	for range 1000000 {
+	for i := range 1000000 {
 		if tl.enforceConstraints() {
 			continue
 		}
 		if tl.enforceExclusives() {
 			continue
+		}
+		if i > 0 {
+			fmt.Printf("assignRows: converged in %d iterations\n", i)
 		}
 		return nil
 	}
@@ -284,6 +287,7 @@ func (tl *Timeline) enforceConstraints() bool {
 		if c.satisfied() {
 			continue
 		}
+		fmt.Printf("enforceConstraints: unsatisfied %s\n", c)
 		switch c.kind {
 		case constraintSameRow:
 			if c.a.row < c.b.row {
@@ -304,6 +308,7 @@ func (tl *Timeline) enforceExclusives() bool {
 		if g.satisfied(tl.Tracks) {
 			continue
 		}
+		fmt.Printf("enforceExclusives: unsatisfied %s\n", g)
 		row := g.members[0].row
 		memberTracks := map[*TimelineTrack]bool{}
 		for _, m := range g.members {
@@ -316,6 +321,7 @@ func (tl *Timeline) enforceExclusives() bool {
 			if !t.cellTypeAt(row, CellEvent, CellTitle, CellSignal) {
 				continue
 			}
+			fmt.Printf("enforceExclusives: inserting gap in track %s at row %d\n", t.ID, row)
 			tl.insertGap(t, row)
 			return true
 		}
@@ -344,6 +350,7 @@ func (tl *Timeline) isAllRemovableGapRow(row int, except *TimelineTrack) bool {
 }
 
 func (tl *Timeline) removeGapAt(track *TimelineTrack, index int) {
+	fmt.Printf("removeGapAt: track %s row %d\n", track.ID, index)
 	track.Cells = append(track.Cells[:index], track.Cells[index+1:]...)
 	tl.reindexRowsFrom(track, index)
 }
@@ -355,8 +362,9 @@ func (tl *Timeline) reindexRowsFrom(track *TimelineTrack, start int) {
 }
 
 func (tl *Timeline) insertGap(track *TimelineTrack, beforeIndex int) {
-
+	fmt.Printf("insertGap: track %s before %d\n", track.ID, beforeIndex)
 	if tl.isAllRemovableGapRow(beforeIndex, track) {
+		fmt.Printf("insertGap: found removable gap row at %d\n", beforeIndex)
 		for _, t := range tl.Tracks {
 			if t == track {
 				continue

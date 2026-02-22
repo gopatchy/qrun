@@ -25,195 +25,245 @@ var delayNamePool = []string{
 	"1s Delay", "2s Delay", "3s Delay", "5s Delay", "Hold",
 }
 
-func GenerateMockShow(numTracks, numScenes, avgCuesPerScene, avgBlocksPerCue int) *Show {
-	rng := rand.New(rand.NewPCG(42, 0))
+type chainable struct {
+	block         *Block
+	trackIdx      int
+	sameTrackOnly bool
+	fromEnded     bool
+}
 
-	show := &Show{}
-	blockIdx := 0
-	curCueName := ""
-	nextBlockID := func(trackIdx int) string {
-		id := fmt.Sprintf("%s-t%d-b%d", curCueName, trackIdx, blockIdx)
-		blockIdx++
-		return id
+type mockShowGen struct {
+	rng        *rand.Rand
+	show       *Show
+	numTracks  int
+	blockIdx   int
+	curCueName string
+	triggerIdx map[TriggerSource]*Trigger
+	needsEnd   map[int]*Block
+	chainFrom  []chainable
+}
+
+func GenerateMockShow(numTracks, numScenes, avgCuesPerScene, avgBlocksPerCue int) *Show {
+	g := &mockShowGen{
+		rng:        rand.New(rand.NewPCG(42, 0)),
+		show:       &Show{},
+		numTracks:  numTracks,
+		triggerIdx: map[TriggerSource]*Trigger{},
+		needsEnd:   map[int]*Block{},
 	}
 
+	g.generateTracks()
+
+	for scene := 1; scene <= numScenes; scene++ {
+		cuesInScene := 1 + g.rng.IntN(avgCuesPerScene*2)
+		for intra := 1; intra <= cuesInScene; intra++ {
+			g.generateCue(fmt.Sprintf("S%d Q%d", scene, intra), avgBlocksPerCue)
+		}
+		g.generateEndOfScene(scene)
+	}
+
+	return g.show
+}
+
+func (g *mockShowGen) generateTracks() {
 	names := make([]string, len(trackNamePool))
 	copy(names, trackNamePool)
-	rng.Shuffle(len(names), func(i, j int) {
+	g.rng.Shuffle(len(names), func(i, j int) {
 		names[i], names[j] = names[j], names[i]
 	})
-	for i := range numTracks {
+	for i := range g.numTracks {
 		name := names[i%len(names)]
 		if i >= len(names) {
 			name = fmt.Sprintf("%s %d", name, i/len(names)+1)
 		}
-		show.Tracks = append(show.Tracks, &Track{
+		g.show.Tracks = append(g.show.Tracks, &Track{
 			ID:   fmt.Sprintf("track_%d", i),
 			Name: name,
 		})
 	}
+}
 
-	randBlock := func(trackIdx int) *Block {
-		r := rng.Float64()
-		var typ, name string
-		var loop bool
-		switch {
-		case r < 0.30:
-			typ, name = "light", lightNamePool[rng.IntN(len(lightNamePool))]
-		case r < 0.55:
-			typ, name = "media", mediaNamePool[rng.IntN(len(mediaNamePool))]
-		case r < 0.70:
-			typ, name, loop = "media", mediaNamePool[rng.IntN(len(mediaNamePool))], true
-		case r < 0.80:
-			typ, name = "delay", delayNamePool[rng.IntN(len(delayNamePool))]
-		default:
-			typ, name = "light", lightNamePool[rng.IntN(len(lightNamePool))]
-		}
-		return &Block{
-			ID:    nextBlockID(trackIdx),
-			Type:  typ,
-			Track: fmt.Sprintf("track_%d", trackIdx),
-			Name:  name,
-			Loop:  loop,
-		}
+func (g *mockShowGen) nextBlockID(trackIdx int) string {
+	id := fmt.Sprintf("%s-t%d-b%d", g.curCueName, trackIdx, g.blockIdx)
+	g.blockIdx++
+	return id
+}
+
+func (g *mockShowGen) randLight() Block {
+	return Block{
+		Type: "light",
+		Name: lightNamePool[g.rng.IntN(len(lightNamePool))],
 	}
+}
 
-	type chainable struct {
-		block         *Block
-		trackIdx      int
-		sameTrackOnly bool
-		fromEnded     bool
+func (g *mockShowGen) randMedia() Block {
+	return Block{
+		Type: "media",
+		Name: mediaNamePool[g.rng.IntN(len(mediaNamePool))],
 	}
+}
 
-	triggerIdx := map[TriggerSource]*Trigger{}
-	addTrigger := func(source TriggerSource, target TriggerTarget) {
-		if t := triggerIdx[source]; t != nil {
-			t.Targets = append(t.Targets, target)
+func (g *mockShowGen) randLoopingMedia() Block {
+	return Block{
+		Type: "media",
+		Name: mediaNamePool[g.rng.IntN(len(mediaNamePool))],
+		Loop: true,
+	}
+}
+
+func (g *mockShowGen) randDelay() Block {
+	return Block{
+		Type: "delay",
+		Name: delayNamePool[g.rng.IntN(len(delayNamePool))],
+	}
+}
+
+func (g *mockShowGen) randBlock(trackIdx int) *Block {
+	r := g.rng.Float64()
+	var b Block
+	switch {
+	case r < 0.50:
+		b = g.randLight()
+	case r < 0.75:
+		b = g.randMedia()
+	case r < 0.90:
+		b = g.randLoopingMedia()
+	default:
+		b = g.randDelay()
+	}
+	b.ID = g.nextBlockID(trackIdx)
+	b.Track = fmt.Sprintf("track_%d", trackIdx)
+	return &b
+}
+
+func (g *mockShowGen) addTrigger(source TriggerSource, target TriggerTarget) {
+	if t := g.triggerIdx[source]; t != nil {
+		t.Targets = append(t.Targets, target)
+		return
+	}
+	t := &Trigger{Source: source, Targets: []TriggerTarget{target}}
+	g.show.Triggers = append(g.show.Triggers, t)
+	g.triggerIdx[source] = t
+}
+
+func (g *mockShowGen) endPreviousBlocks() []TriggerTarget {
+	var cueTargets []TriggerTarget
+	for trackIdx, blk := range g.needsEnd {
+		hook := "END"
+		if g.rng.Float64() < 0.3 {
+			hook = "FADE_OUT"
+		}
+		cueTargets = append(cueTargets, TriggerTarget{Block: blk.ID, Hook: hook})
+		g.chainFrom = append(g.chainFrom, chainable{block: blk, trackIdx: trackIdx, sameTrackOnly: true, fromEnded: true})
+		delete(g.needsEnd, trackIdx)
+	}
+	return cueTargets
+}
+
+func (g *mockShowGen) chainBlock(block *Block, trackIdx int, cueTargets *[]TriggerTarget) {
+	for i, c := range g.chainFrom {
+		if c.trackIdx == trackIdx {
+			g.addTrigger(
+				TriggerSource{Block: c.block.ID, Signal: "END"},
+				TriggerTarget{Block: block.ID, Hook: "START"},
+			)
+			g.chainFrom = append(g.chainFrom[:i], g.chainFrom[i+1:]...)
 			return
 		}
-		t := &Trigger{Source: source, Targets: []TriggerTarget{target}}
-		show.Triggers = append(show.Triggers, t)
-		triggerIdx[source] = t
 	}
-
-	needsEnd := map[int]*Block{}
-	var chainFrom []chainable
-
-	for scene := 1; scene <= numScenes; scene++ {
-		cuesInScene := 1 + rng.IntN(avgCuesPerScene*2)
-
-		for intra := 1; intra <= cuesInScene; intra++ {
-			curCueName = fmt.Sprintf("S%d Q%d", scene, intra)
-			cue := &Block{
-				ID:   curCueName,
-				Type: "cue",
-				Name: curCueName,
-			}
-			show.Blocks = append(show.Blocks, cue)
-
-			cueTargets := []TriggerTarget{}
-			for trackIdx, blk := range needsEnd {
-				hook := "END"
-				if rng.Float64() < 0.3 {
-					hook = "FADE_OUT"
-				}
-				cueTargets = append(cueTargets, TriggerTarget{Block: blk.ID, Hook: hook})
-				chainFrom = append(chainFrom, chainable{block: blk, trackIdx: trackIdx, sameTrackOnly: true, fromEnded: true})
-				delete(needsEnd, trackIdx)
-			}
-
-			blocksThisCue := 1 + rng.IntN(avgBlocksPerCue*2)
-			for range blocksThisCue {
-				trackIdx := rng.IntN(numTracks)
-				if needsEnd[trackIdx] != nil {
-					continue
-				}
-
-				block := randBlock(trackIdx)
-				show.Blocks = append(show.Blocks, block)
-
-				triggered := false
-				for i, c := range chainFrom {
-					if c.trackIdx == trackIdx {
-						addTrigger(
-							TriggerSource{Block: c.block.ID, Signal: "END"},
-							TriggerTarget{Block: block.ID, Hook: "START"},
-						)
-						chainFrom = append(chainFrom[:i], chainFrom[i+1:]...)
-						triggered = true
-						break
-					}
-				}
-				if !triggered && rng.Float64() < 0.3 {
-					var candidates []int
-					for i, c := range chainFrom {
-						if !c.sameTrackOnly {
-							candidates = append(candidates, i)
-						}
-					}
-					if len(candidates) > 0 {
-						idx := candidates[rng.IntN(len(candidates))]
-						c := chainFrom[idx]
-						addTrigger(
-							TriggerSource{Block: c.block.ID, Signal: "END"},
-							TriggerTarget{Block: block.ID, Hook: "START"},
-						)
-						chainFrom = append(chainFrom[:idx], chainFrom[idx+1:]...)
-						triggered = true
-					}
-				}
-				if !triggered {
-					cueTargets = append(cueTargets, TriggerTarget{Block: block.ID, Hook: "START"})
-				}
-
-				if !block.hasDefinedTiming() {
-					needsEnd[trackIdx] = block
-				} else {
-					chainFrom = append(chainFrom, chainable{block: block, trackIdx: trackIdx, sameTrackOnly: true})
-				}
-			}
-
-			filtered := chainFrom[:0]
-			for _, c := range chainFrom {
-				if !c.fromEnded {
-					c.sameTrackOnly = false
-					filtered = append(filtered, c)
-				}
-			}
-			chainFrom = filtered
-
-			if len(cueTargets) > 0 {
-				show.Triggers = append(show.Triggers, &Trigger{
-					Source:  TriggerSource{Block: cue.ID, Signal: "GO"},
-					Targets: cueTargets,
-				})
+	if g.rng.Float64() < 0.3 {
+		var candidates []int
+		for i, c := range g.chainFrom {
+			if !c.sameTrackOnly {
+				candidates = append(candidates, i)
 			}
 		}
-
-		endTargets := []TriggerTarget{}
-		for trackIdx, blk := range needsEnd {
-			hook := "END"
-			if rng.Float64() < 0.3 {
-				hook = "FADE_OUT"
-			}
-			endTargets = append(endTargets, TriggerTarget{Block: blk.ID, Hook: hook})
-			delete(needsEnd, trackIdx)
+		if len(candidates) > 0 {
+			idx := candidates[g.rng.IntN(len(candidates))]
+			c := g.chainFrom[idx]
+			g.addTrigger(
+				TriggerSource{Block: c.block.ID, Signal: "END"},
+				TriggerTarget{Block: block.ID, Hook: "START"},
+			)
+			g.chainFrom = append(g.chainFrom[:idx], g.chainFrom[idx+1:]...)
+			return
 		}
-		chainFrom = nil
-		if len(endTargets) > 0 {
-			endCueName := fmt.Sprintf("S%d End", scene)
-			endCue := &Block{
-				ID:   endCueName,
-				Type: "cue",
-				Name: endCueName,
-			}
-			show.Blocks = append(show.Blocks, endCue)
-			show.Triggers = append(show.Triggers, &Trigger{
-				Source:  TriggerSource{Block: endCue.ID, Signal: "GO"},
-				Targets: endTargets,
-			})
+	}
+	*cueTargets = append(*cueTargets, TriggerTarget{Block: block.ID, Hook: "START"})
+}
+
+func (g *mockShowGen) promoteChainFrom() {
+	filtered := g.chainFrom[:0]
+	for _, c := range g.chainFrom {
+		if !c.fromEnded {
+			c.sameTrackOnly = false
+			filtered = append(filtered, c)
+		}
+	}
+	g.chainFrom = filtered
+}
+
+func (g *mockShowGen) generateCue(name string, avgBlocksPerCue int) {
+	g.curCueName = name
+	cue := &Block{
+		ID:   name,
+		Type: "cue",
+		Name: name,
+	}
+	g.show.Blocks = append(g.show.Blocks, cue)
+
+	cueTargets := g.endPreviousBlocks()
+
+	blocksThisCue := 1 + g.rng.IntN(avgBlocksPerCue*2)
+	for range blocksThisCue {
+		trackIdx := g.rng.IntN(g.numTracks)
+		if g.needsEnd[trackIdx] != nil {
+			continue
+		}
+
+		block := g.randBlock(trackIdx)
+		g.show.Blocks = append(g.show.Blocks, block)
+		g.chainBlock(block, trackIdx, &cueTargets)
+
+		if !block.hasDefinedTiming() {
+			g.needsEnd[trackIdx] = block
+		} else {
+			g.chainFrom = append(g.chainFrom, chainable{block: block, trackIdx: trackIdx, sameTrackOnly: true})
 		}
 	}
 
-	return show
+	g.promoteChainFrom()
+
+	if len(cueTargets) > 0 {
+		g.show.Triggers = append(g.show.Triggers, &Trigger{
+			Source:  TriggerSource{Block: cue.ID, Signal: "GO"},
+			Targets: cueTargets,
+		})
+	}
+}
+
+func (g *mockShowGen) generateEndOfScene(scene int) {
+	var endTargets []TriggerTarget
+	for trackIdx, blk := range g.needsEnd {
+		hook := "END"
+		if g.rng.Float64() < 0.3 {
+			hook = "FADE_OUT"
+		}
+		endTargets = append(endTargets, TriggerTarget{Block: blk.ID, Hook: hook})
+		delete(g.needsEnd, trackIdx)
+	}
+	g.chainFrom = nil
+	if len(endTargets) > 0 {
+		endCueName := fmt.Sprintf("S%d End", scene)
+		endCue := &Block{
+			ID:   endCueName,
+			Type: "cue",
+			Name: endCueName,
+		}
+		g.show.Blocks = append(g.show.Blocks, endCue)
+		g.show.Triggers = append(g.show.Triggers, &Trigger{
+			Source:  TriggerSource{Block: endCue.ID, Signal: "GO"},
+			Targets: endTargets,
+		})
+	}
 }

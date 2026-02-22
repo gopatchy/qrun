@@ -1,6 +1,9 @@
 package main
 
-import "fmt"
+import (
+	"fmt"
+	"slices"
+)
 
 const cueTrackID = "_cue"
 
@@ -377,6 +380,6 @@ func (tl *Timeline) insertGap(track *TimelineTrack, beforeIndex int) {
 		}
 	}
 
-	track.Cells = append(track.Cells[:beforeIndex], append([]*TimelineCell{gap}, track.Cells[beforeIndex:]...)...)
+	track.Cells = slices.Insert(track.Cells, beforeIndex, gap)
 	tl.reindexRowsFrom(track, beforeIndex+1)
 }

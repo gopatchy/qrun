@@ -373,7 +373,9 @@ func (tl *Timeline) insertGap(track *TimelineTrack, beforeIndex int) {
 	gap := &TimelineCell{Type: CellGap, row: beforeIndex, track: track}
 	if beforeIndex > 0 {
 		prev := track.Cells[beforeIndex-1]
-		if prev.BlockID != "" && prev.Event != "END" && prev.Event != "GO" {
+		if prev.Type == CellChain {
+			gap.Type = CellChain
+		} else if prev.BlockID != "" && prev.Event != "END" && prev.Event != "GO" {
 			gap.Type = CellContinuation
 			gap.BlockID = prev.BlockID
 		}

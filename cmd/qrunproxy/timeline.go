@@ -1,6 +1,7 @@
 package main
 
 import (
+	"cmp"
 	"fmt"
 	"slices"
 )
@@ -35,11 +36,11 @@ const (
 )
 
 type TimelineCell struct {
-	Type     CellType       `json:"type"`
-	BlockID  string         `json:"block_id,omitempty"`
-	Event    string         `json:"event,omitempty"`
-	row      int            `json:"-"`
-	track    *TimelineTrack `json:"-"`
+	Type    CellType       `json:"type"`
+	BlockID string         `json:"block_id,omitempty"`
+	Event   string         `json:"event,omitempty"`
+	row     int            `json:"-"`
+	track   *TimelineTrack `json:"-"`
 }
 
 func (t *TimelineTrack) cellTypeAt(index int, types ...CellType) bool {
@@ -150,6 +151,8 @@ func BuildTimeline(show *Show) (Timeline, error) {
 		tl.Blocks[block.ID] = block
 	}
 
+	sortedBlocks := tl.sortBlocks()
+
 	endChains := map[string]bool{}
 	for _, trigger := range show.Triggers {
 		if trigger.Source.Signal != "END" {
@@ -163,13 +166,40 @@ func BuildTimeline(show *Show) (Timeline, error) {
 		}
 	}
 
-	tl.buildCells(endChains)
+	tl.buildCells(endChains, sortedBlocks)
 	tl.buildConstraints()
 	if err := tl.assignRows(); err != nil {
 		return Timeline{}, err
 	}
 
 	return tl, nil
+}
+
+func (tl *Timeline) sortBlocks() []*Block {
+	for i, b := range tl.show.Blocks {
+		b.weight = uint64(i) << 32
+	}
+
+	changed := true
+	for changed {
+		changed = false
+		for _, t := range tl.show.Triggers {
+			src := tl.Blocks[t.Source.Block]
+			for _, target := range t.Targets {
+				dst := tl.Blocks[target.Block]
+				if dst.weight <= src.weight {
+					dst.weight = src.weight + 1
+					changed = true
+				}
+			}
+		}
+	}
+
+	sorted := slices.Clone(tl.show.Blocks)
+	slices.SortFunc(sorted, func(a, b *Block) int {
+		return cmp.Compare(a.weight, b.weight)
+	})
+	return sorted
 }
 
 func (tl *Timeline) addConstraint(kind constraintKind, a, b *TimelineCell) {
@@ -208,13 +238,13 @@ func (tl *Timeline) findCell(blockID, event string) *TimelineCell {
 	panic("cell not found: " + blockID + " " + event)
 }
 
-func (tl *Timeline) buildCells(endChains map[string]bool) {
+func (tl *Timeline) buildCells(endChains map[string]bool, sortedBlocks []*Block) {
 	lastOnTrack := map[string]*Block{}
-	for _, block := range tl.show.Blocks {
+	for _, block := range sortedBlocks {
 		lastOnTrack[block.Track] = block
 	}
 
-	for _, block := range tl.show.Blocks {
+	for _, block := range sortedBlocks {
 		track := tl.trackIdx[block.Track]
 		var cells []*TimelineCell
 		switch block.Type {

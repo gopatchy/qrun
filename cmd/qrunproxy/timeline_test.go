@@ -35,3 +35,41 @@ func BenchmarkBuildTimeline(b *testing.B) {
 		BuildTimeline(show)
 	}
 }
+
+func TestTimelineOrderDependency(t *testing.T) {
+	show := &Show{
+		Tracks: []*Track{
+			{ID: "T1", Name: "Track 1"},
+			{ID: "T2", Name: "Track 2"},
+		},
+		Blocks: []*Block{
+			{ID: "B", Type: "media", Track: "T1", Name: "Block B"},
+			{ID: "A", Type: "media", Track: "T1", Name: "Block A"},
+			{ID: "C", Type: "media", Track: "T2", Name: "Block C"},
+			{ID: "C1", Type: "cue", Name: "Cue 1"},
+		},
+		Triggers: []*Trigger{
+			{
+				Source: TriggerSource{Block: "C1", Signal: "GO"},
+				Targets: []TriggerTarget{{Block: "A", Hook: "START"}},
+			},
+			{
+				Source: TriggerSource{Block: "A", Signal: "END"},
+				Targets: []TriggerTarget{{Block: "C", Hook: "START"}},
+			},
+			{
+				Source: TriggerSource{Block: "C", Signal: "END"},
+				Targets: []TriggerTarget{{Block: "B", Hook: "START"}},
+			},
+		},
+	}
+
+	if err := show.Validate(); err != nil {
+		t.Fatalf("Validate failed: %v", err)
+	}
+
+	_, err := BuildTimeline(show)
+	if err != nil {
+		t.Fatalf("BuildTimeline failed: %v", err)
+	}
+}

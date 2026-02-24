@@ -18,12 +18,19 @@ func TestBuildTimelineFromMockShow(t *testing.T) {
 	t.Logf("Validate: %v", time.Since(t1))
 
 	t2 := time.Now()
-	tl, err := BuildTimeline(show)
+	tl, err := BuildTimelineDebug(show, &testWriter{t})
 	t.Logf("BuildTimeline: %v", time.Since(t2))
 	if err != nil {
 		t.Fatalf("BuildTimeline failed: %v", err)
 	}
 	t.Logf("tracks=%d blocks=%d", len(tl.Tracks), len(tl.Blocks))
+}
+
+type testWriter struct{ t *testing.T }
+
+func (w *testWriter) Write(p []byte) (int, error) {
+	w.t.Log(string(p))
+	return len(p), nil
 }
 
 func BenchmarkBuildTimeline(b *testing.B) {

@@ -216,44 +216,38 @@ func (tl *Timeline) linkTriggers() {
 }
 
 func (tl *Timeline) computeWeights() {
-	for _, block := range tl.show.Blocks {
-		block.weight = 0
-	}
-
+	cueEndedBlocks := map[string]bool{}
 	for _, trigger := range tl.show.Triggers {
 		if trigger.Source.block.Type != "cue" {
 			continue
 		}
 		for _, target := range trigger.Targets {
 			if target.Hook == "END" || target.Hook == "FADE_OUT" {
-				if target.block.weight < 1 {
-					target.block.weight = 1
-				}
+				cueEndedBlocks[target.Block] = true
 			}
 		}
 	}
 
+	cueIdx := uint64(0)
 	for _, block := range tl.show.Blocks {
 		if block.Type == "cue" {
-			tl.computeWeightDFS(block)
+			tl.setWeightDFS(block, cueIdx<<32, cueEndedBlocks)
+			cueIdx++
 		}
 	}
 }
 
-func (tl *Timeline) computeWeightDFS(b *Block) int {
-	maxChild := 0
+func (tl *Timeline) setWeightDFS(b *Block, base uint64, cueEndedBlocks map[string]bool) {
+	if cueEndedBlocks[b.ID] {
+		b.weight = base
+	} else {
+		b.weight = base + 1
+	}
 	for _, trigger := range b.triggers {
 		for _, target := range trigger.Targets {
-			w := tl.computeWeightDFS(target.block)
-			if w > maxChild {
-				maxChild = w
-			}
+			tl.setWeightDFS(target.block, base, cueEndedBlocks)
 		}
 	}
-	if maxChild > b.weight {
-		b.weight = maxChild
-	}
-	return b.weight
 }
 
 func (tl *Timeline) findEndChains() map[string]bool {
@@ -307,34 +301,163 @@ func (tl *Timeline) findCell(blockID, event string) *TimelineCell {
 	panic("cell not found: " + blockID + " " + event)
 }
 
+func blockHeight(b *Block) int {
+	if b.Type == "cue" {
+		return 0
+	}
+	return 4
+}
+
+func eventOffset(event string) int {
+	switch event {
+	case "GO":
+		return 0
+	case "START":
+		return 0
+	case "FADE_OUT":
+		return 2
+	case "END":
+		return 3
+	default:
+		return 0
+	}
+}
+
 func (tl *Timeline) buildCells() {
-	endChains := tl.findEndChains()
-	lastOnTrack := map[string]*Block{}
+	cueIdx := 0
 	for _, block := range tl.show.Blocks {
-		lastOnTrack[block.Track] = block
+		if block.Type == "cue" {
+			block.topRow = cueIdx
+			cueIdx++
+		} else {
+			block.topRow = 0
+		}
+	}
+
+	for range 1000 {
+		changed := false
+
+		for _, trigger := range tl.show.Triggers {
+			srcRow := trigger.Source.block.topRow + eventOffset(trigger.Source.Signal)
+			for _, target := range trigger.Targets {
+				targetRow := srcRow - eventOffset(target.Hook)
+				if target.block.topRow < targetRow {
+					target.block.topRow = targetRow
+					changed = true
+				}
+			}
+		}
+
+		for _, track := range tl.Tracks {
+			trackBlocks := tl.blocksByTrack(track.ID)
+			slices.SortFunc(trackBlocks, func(a, b *Block) int {
+				if a.topRow != b.topRow {
+					return a.topRow - b.topRow
+				}
+				if a.weight != b.weight {
+					if a.weight < b.weight {
+						return -1
+					}
+					return 1
+				}
+				return 0
+			})
+			for i := 1; i < len(trackBlocks); i++ {
+				prev := trackBlocks[i-1]
+				cur := trackBlocks[i]
+				minRow := prev.topRow + blockHeight(prev) + 1
+				if cur.topRow < minRow {
+					cur.topRow = minRow
+					changed = true
+				}
+			}
+		}
+
+		if !changed {
+			break
+		}
 	}
 
 	for _, block := range tl.show.Blocks {
-		track := tl.trackIdx[block.Track]
-		var cells []*TimelineCell
-		switch block.Type {
-		case "cue":
-			cells = getCueCells(block)
-		default:
-			cells = getBlockCells(block)
+		if block.Type != "cue" {
+			continue
 		}
-		track.appendCells(cells...)
-		for _, c := range cells {
-			if c.Event == "" {
-				continue
+		maxRow := block.topRow
+		for _, trigger := range block.triggers {
+			for _, target := range trigger.Targets {
+				r := target.block.topRow + eventOffset(target.Hook)
+				if r > maxRow {
+					maxRow = r
+				}
 			}
-			tl.cellIdx[cellKey{blockID: c.BlockID, event: c.Event}] = c
 		}
-		if block.Type != "cue" && lastOnTrack[block.Track] != block {
-			if endChains[block.ID] {
-				track.appendCells(&TimelineCell{Type: CellChain})
-			} else {
-				track.appendCells(&TimelineCell{Type: CellGap})
+		block.topRow = maxRow
+	}
+
+	tl.emitCells()
+	tl.debugState()
+}
+
+func (tl *Timeline) blocksByTrack(trackID string) []*Block {
+	var blocks []*Block
+	for _, block := range tl.show.Blocks {
+		if block.Track == trackID {
+			blocks = append(blocks, block)
+		}
+	}
+	return blocks
+}
+
+func (tl *Timeline) emitCells() {
+	endChains := tl.findEndChains()
+
+	type trackEntry struct {
+		block *Block
+	}
+	trackBlocks := map[string][]*Block{}
+	for _, block := range tl.show.Blocks {
+		trackBlocks[block.Track] = append(trackBlocks[block.Track], block)
+	}
+
+	for trackID, blocks := range trackBlocks {
+		track := tl.trackIdx[trackID]
+		slices.SortFunc(blocks, func(a, b *Block) int {
+			return a.topRow - b.topRow
+		})
+
+		row := 0
+		for i, block := range blocks {
+			for row < block.topRow {
+				if block.Type != "cue" {
+					track.appendCells(&TimelineCell{Type: CellGap})
+				}
+				row++
+			}
+
+			var cells []*TimelineCell
+			switch block.Type {
+			case "cue":
+				cells = getCueCells(block)
+			default:
+				cells = getBlockCells(block)
+			}
+			track.appendCells(cells...)
+			for _, c := range cells {
+				if c.Event == "" {
+					continue
+				}
+				tl.cellIdx[cellKey{blockID: c.BlockID, event: c.Event}] = c
+			}
+			row += len(cells)
+
+			isLast := i == len(blocks)-1
+			if !isLast && block.Type != "cue" {
+				if endChains[block.ID] {
+					track.appendCells(&TimelineCell{Type: CellChain})
+				} else {
+					track.appendCells(&TimelineCell{Type: CellGap})
+				}
+				row++
 			}
 		}
 	}

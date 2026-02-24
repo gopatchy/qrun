@@ -20,8 +20,9 @@ type Block struct {
 	Name  string `json:"name"`
 	Loop  bool   `json:"loop,omitempty"`
 
-	weight   int
+	weight   uint64
 	triggers []*Trigger
+	topRow   int
 }
 
 type Trigger struct {

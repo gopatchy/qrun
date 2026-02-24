@@ -2,7 +2,6 @@ package main
 
 import (
 	"math/rand/v2"
-	"os"
 	"testing"
 	"time"
 )
@@ -32,7 +31,7 @@ func TestBuildTimelineSeed11(t *testing.T) {
 	if err := show.Validate(); err != nil {
 		t.Fatalf("validate: %v", err)
 	}
-	_, err := BuildTimelineDebug(show, os.Stderr)
+	_, err := BuildTimeline(show)
 	if err != nil {
 		t.Fatalf("BuildTimeline failed: %v", err)
 	}

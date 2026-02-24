@@ -280,6 +280,15 @@ func (tl *Timeline) updateTrackDeepest(b *Block, cue string, trackDeepest map[tr
 	}
 }
 
+func (tl *Timeline) crossTrackWeight(trg *Block, baseWeight uint64, cue string, tdRead map[trackCueKey]*Block) uint64 {
+	deep := tdRead[trackCueKey{track: trg.Track, cue: cue}]
+	if deep == nil || deep.weight+1 <= baseWeight {
+		return baseWeight
+	}
+	tl.debugf("trackDeepest read {%s, %s} = %s (w=%d): bumping %s from %d to %d", trg.Track, cue, deep.ID, deep.weight, trg.ID, baseWeight, deep.weight+1)
+	return deep.weight + 1
+}
+
 func (tl *Timeline) setWeightRecursive(b *Block, weight uint64, cue string, tdRead, tdWrite map[trackCueKey]*Block) bool {
 	changed := tl.setWeight(b, weight)
 	tl.updateTrackDeepest(b, cue, tdWrite)
@@ -294,22 +303,16 @@ func (tl *Timeline) setWeightRecursive(b *Block, weight uint64, cue string, tdRe
 			trg := tl.Blocks[target.Block]
 			targetWeight := b.weight + 1
 			tw := tdWrite
-			if trg.Track != b.Track {
-				if b.Track != cueTrackID {
-					if deep := tdRead[trackCueKey{track: trg.Track, cue: cue}]; deep != nil {
-						if deep.weight+1 > targetWeight {
-							tl.debugf("trackDeepest read {%s, %s} = %s (w=%d): bumping %s from %d to %d", trg.Track, cue, deep.ID, deep.weight, trg.ID, targetWeight, deep.weight+1)
-							targetWeight = deep.weight + 1
-						}
-					}
-					tw = nil
-				}
+
+			if trg.Track != b.Track && b.Track != cueTrackID {
+				targetWeight = tl.crossTrackWeight(trg, targetWeight, cue, tdRead)
+				tw = nil
 			}
+
 			changed = tl.setWeightRecursive(trg, targetWeight, cue, tdRead, tw) || changed
 			if trg.Track == b.Track {
 				changed = tl.setWeight(b, trg.weight-1) || changed
 			}
-			// TODO: needs to go to other targets
 		}
 	}
 	return changed

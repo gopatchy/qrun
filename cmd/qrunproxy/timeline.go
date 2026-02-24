@@ -225,17 +225,28 @@ func BuildTimelineDebug(show *Show, debugW io.Writer) (Timeline, error) {
 	return tl, nil
 }
 
+type trackCueKey struct {
+	track string
+	cue   string
+}
+
 func (tl *Timeline) sortBlocks() []*Block {
 	for _, b := range tl.show.Blocks {
 		b.weight = 0
 	}
 
+	trackDeepest := map[trackCueKey]*Block{}
+
 	changed := true
-	for changed {
+	for pass := 0; changed; pass++ {
+		if pass > 1000 {
+			tl.debugf("sortBlocks: did not converge after %d passes", pass)
+			break
+		}
 		changed = false
 		for i, b := range tl.show.Blocks {
 			if b.Type == "cue" {
-				changed = tl.setWeightRecursive(b, uint64(i+1)<<32) || changed
+				changed = tl.setWeightRecursive(b, uint64(i+1)<<32, b.ID, trackDeepest, trackDeepest) || changed
 			}
 		}
 	}
@@ -244,6 +255,9 @@ func (tl *Timeline) sortBlocks() []*Block {
 	slices.SortFunc(sorted, func(a, b *Block) int {
 		return cmp.Compare(a.weight, b.weight)
 	})
+	for _, b := range sorted {
+		tl.debugf("weight %s track=%s type=%s w=%d", b.ID, b.Track, b.Type, b.weight)
+	}
 	return sorted
 }
 
@@ -255,8 +269,20 @@ func (tl *Timeline) setWeight(b *Block, weight uint64) bool {
 	return true
 }
 
-func (tl *Timeline) setWeightRecursive(b *Block, weight uint64) bool {
+func (tl *Timeline) updateTrackDeepest(b *Block, cue string, trackDeepest map[trackCueKey]*Block) {
+	if trackDeepest == nil {
+		return
+	}
+	key := trackCueKey{track: b.Track, cue: cue}
+	if prev := trackDeepest[key]; prev == nil || b.weight > prev.weight {
+		tl.debugf("trackDeepest set {%s, %s} = %s (w=%d, prev=%v)", key.track, key.cue, b.ID, b.weight, prev)
+		trackDeepest[key] = b
+	}
+}
+
+func (tl *Timeline) setWeightRecursive(b *Block, weight uint64, cue string, tdRead, tdWrite map[trackCueKey]*Block) bool {
 	changed := tl.setWeight(b, weight)
+	tl.updateTrackDeepest(b, cue, tdWrite)
 
 	for _, t := range tl.show.Triggers {
 		// TODO: needs a lookup table
@@ -266,7 +292,20 @@ func (tl *Timeline) setWeightRecursive(b *Block, weight uint64) bool {
 
 		for _, target := range t.Targets {
 			trg := tl.Blocks[target.Block]
-			changed = tl.setWeightRecursive(trg, b.weight+1) || changed
+			targetWeight := b.weight + 1
+			tw := tdWrite
+			if trg.Track != b.Track {
+				if b.Track != cueTrackID {
+					if deep := tdRead[trackCueKey{track: trg.Track, cue: cue}]; deep != nil {
+						if deep.weight+1 > targetWeight {
+							tl.debugf("trackDeepest read {%s, %s} = %s (w=%d): bumping %s from %d to %d", trg.Track, cue, deep.ID, deep.weight, trg.ID, targetWeight, deep.weight+1)
+							targetWeight = deep.weight + 1
+						}
+					}
+					tw = nil
+				}
+			}
+			changed = tl.setWeightRecursive(trg, targetWeight, cue, tdRead, tw) || changed
 			if trg.Track == b.Track {
 				changed = tl.setWeight(b, trg.weight-1) || changed
 			}

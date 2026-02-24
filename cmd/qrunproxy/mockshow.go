@@ -43,9 +43,9 @@ type mockShowGen struct {
 	chainFrom  []chainable
 }
 
-func GenerateMockShow(numTracks, numScenes, avgCuesPerScene, avgBlocksPerCue int) *Show {
+func GenerateMockShow(seed uint64, numTracks, numScenes, avgCuesPerScene, avgBlocksPerCue int) *Show {
 	g := &mockShowGen{
-		rng:        rand.New(rand.NewPCG(rand.Uint64(), rand.Uint64())),
+		rng:        rand.New(rand.NewPCG(seed, seed)),
 		show:       &Show{},
 		numTracks:  numTracks,
 		triggerIdx: map[TriggerSource]*Trigger{},

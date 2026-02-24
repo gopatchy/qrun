@@ -3,7 +3,9 @@ package main
 import (
 	"cmp"
 	"fmt"
+	"io"
 	"slices"
+	"strings"
 )
 
 const cueTrackID = "_cue"
@@ -22,6 +24,7 @@ type Timeline struct {
 	cellIdx     map[cellKey]*TimelineCell `json:"-"`
 	constraints []constraint              `json:"-"`
 	exclusives  []exclusiveGroup          `json:"-"`
+	debugW      io.Writer                 `json:"-"`
 }
 
 type CellType string
@@ -123,17 +126,64 @@ func (g exclusiveGroup) String() string {
 	return s + ")"
 }
 
+func (tl *Timeline) debugf(format string, args ...any) {
+	if tl.debugW != nil {
+		fmt.Fprintf(tl.debugW, format+"\n", args...)
+	}
+}
+
+func (tl *Timeline) debugState() {
+	if tl.debugW == nil {
+		return
+	}
+	fmt.Fprintf(tl.debugW, "=== state ===\n")
+	for _, t := range tl.Tracks {
+		var parts []string
+		for _, c := range t.Cells {
+			switch c.Type {
+			case CellEvent, CellSignal:
+				parts = append(parts, fmt.Sprintf("r%d:%s/%s", c.row, c.BlockID, c.Event))
+			case CellTitle:
+				parts = append(parts, fmt.Sprintf("r%d:title(%s)", c.row, c.BlockID))
+			default:
+				parts = append(parts, fmt.Sprintf("r%d:%s", c.row, c.Type))
+			}
+		}
+		fmt.Fprintf(tl.debugW, "  %s: [%s]\n", t.ID, strings.Join(parts, " "))
+	}
+	for _, c := range tl.constraints {
+		sat := "OK"
+		if !c.satisfied() {
+			sat = "UNSATISFIED"
+		}
+		fmt.Fprintf(tl.debugW, "  constraint %s %s\n", c, sat)
+	}
+	for _, g := range tl.exclusives {
+		sat := "OK"
+		if !g.satisfied(tl.Tracks) {
+			sat = "UNSATISFIED"
+		}
+		fmt.Fprintf(tl.debugW, "  exclusive %s %s\n", g, sat)
+	}
+	fmt.Fprintf(tl.debugW, "=============\n")
+}
+
 type cellKey struct {
 	blockID string
 	event   string
 }
 
 func BuildTimeline(show *Show) (Timeline, error) {
+	return BuildTimelineDebug(show, nil)
+}
+
+func BuildTimelineDebug(show *Show, debugW io.Writer) (Timeline, error) {
 	tl := Timeline{
 		show:     show,
 		Blocks:   map[string]*Block{},
 		trackIdx: map[string]*TimelineTrack{},
 		cellIdx:  map[cellKey]*TimelineCell{},
+		debugW:   debugW,
 	}
 
 	cueTrack := &TimelineTrack{Track: &Track{ID: cueTrackID, Name: "Cue"}}
@@ -176,21 +226,16 @@ func BuildTimeline(show *Show) (Timeline, error) {
 }
 
 func (tl *Timeline) sortBlocks() []*Block {
-	for i, b := range tl.show.Blocks {
-		b.weight = uint64(i) << 32
+	for _, b := range tl.show.Blocks {
+		b.weight = 0
 	}
 
 	changed := true
 	for changed {
 		changed = false
-		for _, t := range tl.show.Triggers {
-			src := tl.Blocks[t.Source.Block]
-			for _, target := range t.Targets {
-				dst := tl.Blocks[target.Block]
-				if dst.weight <= src.weight {
-					dst.weight = src.weight + 1
-					changed = true
-				}
+		for i, b := range tl.show.Blocks {
+			if b.Type == "cue" {
+				changed = tl.setWeightRecursive(b, uint64(i+1)<<32) || changed
 			}
 		}
 	}
@@ -200,6 +245,35 @@ func (tl *Timeline) sortBlocks() []*Block {
 		return cmp.Compare(a.weight, b.weight)
 	})
 	return sorted
+}
+
+func (tl *Timeline) setWeight(b *Block, weight uint64) bool {
+	if weight <= b.weight {
+		return false
+	}
+	b.weight = weight
+	return true
+}
+
+func (tl *Timeline) setWeightRecursive(b *Block, weight uint64) bool {
+	changed := tl.setWeight(b, weight)
+
+	for _, t := range tl.show.Triggers {
+		// TODO: needs a lookup table
+		if t.Source.Block != b.ID {
+			continue
+		}
+
+		for _, target := range t.Targets {
+			trg := tl.Blocks[target.Block]
+			changed = tl.setWeightRecursive(trg, b.weight+1) || changed
+			if trg.Track == b.Track {
+				changed = tl.setWeight(b, trg.weight-1) || changed
+			}
+			// TODO: needs to go to other targets
+		}
+	}
+	return changed
 }
 
 func (tl *Timeline) addConstraint(kind constraintKind, a, b *TimelineCell) {
@@ -293,13 +367,15 @@ func (tl *Timeline) buildConstraints() {
 }
 
 func (tl *Timeline) assignRows() error {
-	for range 1000000 {
-		if tl.enforceConstraints() {
+	tl.debugState()
+	for i := range 1000000 {
+		if tl.enforceConstraints(i) {
 			continue
 		}
-		if tl.enforceExclusives() {
+		if tl.enforceExclusives(i) {
 			continue
 		}
+		tl.debugf("converged after %d iterations", i)
 		return nil
 	}
 	for _, c := range tl.constraints {
@@ -315,7 +391,7 @@ func (tl *Timeline) assignRows() error {
 	return fmt.Errorf("assignRows: did not converge")
 }
 
-func (tl *Timeline) enforceConstraints() bool {
+func (tl *Timeline) enforceConstraints(iter int) bool {
 	for _, c := range tl.constraints {
 		if c.satisfied() {
 			continue
@@ -323,8 +399,10 @@ func (tl *Timeline) enforceConstraints() bool {
 		switch c.kind {
 		case constraintSameRow:
 			if c.a.row < c.b.row {
+				tl.debugf("iter %d: constraint %s: insert gap on %s before r%d", iter, c, c.a.track.ID, c.a.row)
 				tl.insertGap(c.a.track, c.a.row)
 			} else {
+				tl.debugf("iter %d: constraint %s: insert gap on %s before r%d", iter, c, c.b.track.ID, c.b.row)
 				tl.insertGap(c.b.track, c.b.row)
 			}
 		default:
@@ -335,19 +413,22 @@ func (tl *Timeline) enforceConstraints() bool {
 	return false
 }
 
-func (tl *Timeline) enforceExclusives() bool {
+func (tl *Timeline) enforceExclusives(iter int) bool {
 	for _, g := range tl.exclusives {
 		if g.satisfied(tl.Tracks) {
 			continue
 		}
 		row := g.members[0].row
+		tl.debugf("iter %d: exclusive %s: split at r%d", iter, g, row)
 		for _, t := range tl.Tracks {
 			if row >= len(t.Cells) {
 				continue
 			}
 			if g.memberTracks[t] {
+				tl.debugf("  member %s: insertGapInt before r%d", t.ID, row)
 				tl.insertGapInt(t, row)
 			} else {
+				tl.debugf("  non-member %s: insertGapInt before r%d", t.ID, row+1)
 				tl.insertGapInt(t, row+1)
 			}
 		}
@@ -389,6 +470,7 @@ func (tl *Timeline) reindexRowsFrom(track *TimelineTrack, start int) {
 
 func (tl *Timeline) insertGap(track *TimelineTrack, beforeIndex int) {
 	if tl.isAllRemovableGapRow(beforeIndex, track) {
+		tl.debugf("  insertGap(%s, r%d): removable row, removing from other tracks", track.ID, beforeIndex)
 		for _, t := range tl.Tracks {
 			if t == track {
 				continue
@@ -396,10 +478,12 @@ func (tl *Timeline) insertGap(track *TimelineTrack, beforeIndex int) {
 			if beforeIndex >= len(t.Cells) {
 				continue
 			}
+			tl.debugf("    removeGap %s r%d (%s)", t.ID, beforeIndex, t.Cells[beforeIndex].Type)
 			tl.removeGapAt(t, beforeIndex)
 		}
 		return
 	}
+	tl.debugf("  insertGap(%s, r%d): inserting", track.ID, beforeIndex)
 	tl.insertGapInt(track, beforeIndex)
 }
 

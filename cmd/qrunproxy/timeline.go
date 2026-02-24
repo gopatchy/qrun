@@ -18,12 +18,12 @@ type Timeline struct {
 	Tracks []*TimelineTrack  `json:"tracks"`
 	Blocks map[string]*Block `json:"blocks"`
 
-	show        *Show                     `json:"-"`
-	trackIdx    map[string]*TimelineTrack `json:"-"`
-	cellIdx     map[cellKey]*TimelineCell `json:"-"`
-	sameRows    []sameRowConstraint              `json:"-"`
-	exclusives  []exclusiveGroup          `json:"-"`
-	debugW      io.Writer                 `json:"-"`
+	show       *Show                     `json:"-"`
+	trackIdx   map[string]*TimelineTrack `json:"-"`
+	cellIdx    map[cellKey]*TimelineCell `json:"-"`
+	sameRows   []sameRowConstraint       `json:"-"`
+	exclusives []exclusiveGroup          `json:"-"`
+	debugW     io.Writer                 `json:"-"`
 }
 
 type CellType string
@@ -168,25 +168,41 @@ func BuildTimelineDebug(show *Show, debugW io.Writer) (Timeline, error) {
 		debugW:   debugW,
 	}
 
+	tl.buildTracks()
+	tl.indexBlocks()
+	tl.buildCells()
+	tl.buildConstraints()
+	if err := tl.assignRows(); err != nil {
+		return Timeline{}, err
+	}
+
+	return tl, nil
+}
+
+func (tl *Timeline) buildTracks() {
 	cueTrack := &TimelineTrack{Track: &Track{ID: cueTrackID, Name: "Cue"}}
 	tl.Tracks = append(tl.Tracks, cueTrack)
 	tl.trackIdx[cueTrackID] = cueTrack
-	for _, track := range show.Tracks {
+
+	for _, track := range tl.show.Tracks {
 		tt := &TimelineTrack{Track: track}
 		tl.Tracks = append(tl.Tracks, tt)
 		tl.trackIdx[track.ID] = tt
 	}
-	for _, block := range show.Blocks {
+}
+
+func (tl *Timeline) indexBlocks() {
+	for _, block := range tl.show.Blocks {
 		if block.Type == "cue" {
 			block.Track = cueTrackID
 		}
 		tl.Blocks[block.ID] = block
 	}
+}
 
-	sortedBlocks := tl.show.Blocks
-
+func (tl *Timeline) findEndChains() map[string]bool {
 	endChains := map[string]bool{}
-	for _, trigger := range show.Triggers {
+	for _, trigger := range tl.show.Triggers {
 		if trigger.Source.Signal != "END" {
 			continue
 		}
@@ -197,16 +213,8 @@ func BuildTimelineDebug(show *Show, debugW io.Writer) (Timeline, error) {
 			}
 		}
 	}
-
-	tl.buildCells(endChains, sortedBlocks)
-	tl.buildConstraints()
-	if err := tl.assignRows(); err != nil {
-		return Timeline{}, err
-	}
-
-	return tl, nil
+	return endChains
 }
-
 
 func (tl *Timeline) addSameRow(a, b *TimelineCell) {
 	tl.sameRows = append(tl.sameRows, sameRowConstraint{a: a, b: b})
@@ -244,13 +252,14 @@ func (tl *Timeline) findCell(blockID, event string) *TimelineCell {
 	panic("cell not found: " + blockID + " " + event)
 }
 
-func (tl *Timeline) buildCells(endChains map[string]bool, sortedBlocks []*Block) {
+func (tl *Timeline) buildCells() {
+	endChains := tl.findEndChains()
 	lastOnTrack := map[string]*Block{}
-	for _, block := range sortedBlocks {
+	for _, block := range tl.show.Blocks {
 		lastOnTrack[block.Track] = block
 	}
 
-	for _, block := range sortedBlocks {
+	for _, block := range tl.show.Blocks {
 		track := tl.trackIdx[block.Track]
 		var cells []*TimelineCell
 		switch block.Type {

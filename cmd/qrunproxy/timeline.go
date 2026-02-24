@@ -226,8 +226,14 @@ func BuildTimelineDebug(show *Show, debugW io.Writer) (Timeline, error) {
 }
 
 func (tl *Timeline) sortBlocks() []*Block {
-	for i, b := range tl.show.Blocks {
-		b.weight = uint64(i) << 32
+	cueIdx := 0
+	for _, b := range tl.show.Blocks {
+		if b.Type == "cue" {
+			b.weight = uint64(cueIdx+1) << 32
+			cueIdx++
+		} else {
+			b.weight = 0
+		}
 	}
 
 	changed := true

@@ -225,28 +225,22 @@ func BuildTimelineDebug(show *Show, debugW io.Writer) (Timeline, error) {
 	return tl, nil
 }
 
-type trackCueKey struct {
-	track string
-	cue   string
-}
-
 func (tl *Timeline) sortBlocks() []*Block {
-	for _, b := range tl.show.Blocks {
-		b.weight = 0
+	for i, b := range tl.show.Blocks {
+		b.weight = uint64(i) << 32
 	}
 
-	trackDeepest := map[trackCueKey]*Block{}
-
 	changed := true
-	for pass := 0; changed; pass++ {
-		if pass > 1000 {
-			tl.debugf("sortBlocks: did not converge after %d passes", pass)
-			break
-		}
+	for changed {
 		changed = false
-		for i, b := range tl.show.Blocks {
-			if b.Type == "cue" {
-				changed = tl.setWeightRecursive(b, uint64(i+1)<<32, b.ID, trackDeepest, trackDeepest) || changed
+		for _, t := range tl.show.Triggers {
+			src := tl.Blocks[t.Source.Block]
+			for _, target := range t.Targets {
+				dst := tl.Blocks[target.Block]
+				if dst.weight <= src.weight {
+					dst.weight = src.weight + 1
+					changed = true
+				}
 			}
 		}
 	}
@@ -255,67 +249,7 @@ func (tl *Timeline) sortBlocks() []*Block {
 	slices.SortFunc(sorted, func(a, b *Block) int {
 		return cmp.Compare(a.weight, b.weight)
 	})
-	for _, b := range sorted {
-		tl.debugf("weight %s track=%s type=%s w=%d", b.ID, b.Track, b.Type, b.weight)
-	}
 	return sorted
-}
-
-func (tl *Timeline) setWeight(b *Block, weight uint64) bool {
-	if weight <= b.weight {
-		return false
-	}
-	b.weight = weight
-	return true
-}
-
-func (tl *Timeline) updateTrackDeepest(b *Block, cue string, trackDeepest map[trackCueKey]*Block) {
-	if trackDeepest == nil {
-		return
-	}
-	key := trackCueKey{track: b.Track, cue: cue}
-	if prev := trackDeepest[key]; prev == nil || b.weight > prev.weight {
-		tl.debugf("trackDeepest set {%s, %s} = %s (w=%d, prev=%v)", key.track, key.cue, b.ID, b.weight, prev)
-		trackDeepest[key] = b
-	}
-}
-
-func (tl *Timeline) crossTrackWeight(trg *Block, baseWeight uint64, cue string, tdRead map[trackCueKey]*Block) uint64 {
-	deep := tdRead[trackCueKey{track: trg.Track, cue: cue}]
-	if deep == nil || deep.weight+1 <= baseWeight {
-		return baseWeight
-	}
-	tl.debugf("trackDeepest read {%s, %s} = %s (w=%d): bumping %s from %d to %d", trg.Track, cue, deep.ID, deep.weight, trg.ID, baseWeight, deep.weight+1)
-	return deep.weight + 1
-}
-
-func (tl *Timeline) setWeightRecursive(b *Block, weight uint64, cue string, tdRead, tdWrite map[trackCueKey]*Block) bool {
-	changed := tl.setWeight(b, weight)
-	tl.updateTrackDeepest(b, cue, tdWrite)
-
-	for _, t := range tl.show.Triggers {
-		// TODO: needs a lookup table
-		if t.Source.Block != b.ID {
-			continue
-		}
-
-		for _, target := range t.Targets {
-			trg := tl.Blocks[target.Block]
-			targetWeight := b.weight + 1
-			tw := tdWrite
-
-			if trg.Track != b.Track && b.Track != cueTrackID {
-				targetWeight = tl.crossTrackWeight(trg, targetWeight, cue, tdRead)
-				tw = nil
-			}
-
-			changed = tl.setWeightRecursive(trg, targetWeight, cue, tdRead, tw) || changed
-			if trg.Track == b.Track {
-				changed = tl.setWeight(b, trg.weight-1) || changed
-			}
-		}
-	}
-	return changed
 }
 
 func (tl *Timeline) addConstraint(kind constraintKind, a, b *TimelineCell) {

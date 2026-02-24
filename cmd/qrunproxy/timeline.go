@@ -21,7 +21,7 @@ type Timeline struct {
 	show        *Show                     `json:"-"`
 	trackIdx    map[string]*TimelineTrack `json:"-"`
 	cellIdx     map[cellKey]*TimelineCell `json:"-"`
-	constraints []constraint              `json:"-"`
+	sameRows    []sameRowConstraint              `json:"-"`
 	exclusives  []exclusiveGroup          `json:"-"`
 	debugW      io.Writer                 `json:"-"`
 }
@@ -61,34 +61,17 @@ func (c *TimelineCell) String() string {
 	return fmt.Sprintf("%s/%s@%s:r%d", c.BlockID, c.Event, c.track.ID, c.row)
 }
 
-type constraintKind string
-
-const (
-	constraintSameRow constraintKind = "same_row"
-)
-
-type constraint struct {
-	kind constraintKind
-	a    *TimelineCell
-	b    *TimelineCell
+type sameRowConstraint struct {
+	a *TimelineCell
+	b *TimelineCell
 }
 
-func (c constraint) satisfied() bool {
-	switch c.kind {
-	case constraintSameRow:
-		return c.a.row == c.b.row
-	default:
-		panic("invalid constraint kind: " + string(c.kind))
-	}
+func (c sameRowConstraint) satisfied() bool {
+	return c.a.row == c.b.row
 }
 
-func (c constraint) String() string {
-	switch c.kind {
-	case constraintSameRow:
-		return fmt.Sprintf("same_row(%s, %s)", c.a, c.b)
-	default:
-		panic("invalid constraint kind: " + string(c.kind))
-	}
+func (c sameRowConstraint) String() string {
+	return fmt.Sprintf("same_row(%s, %s)", c.a, c.b)
 }
 
 type exclusiveGroup struct {
@@ -150,7 +133,7 @@ func (tl *Timeline) debugState() {
 		}
 		fmt.Fprintf(tl.debugW, "  %s: [%s]\n", t.ID, strings.Join(parts, " "))
 	}
-	for _, c := range tl.constraints {
+	for _, c := range tl.sameRows {
 		sat := "OK"
 		if !c.satisfied() {
 			sat = "UNSATISFIED"
@@ -225,8 +208,8 @@ func BuildTimelineDebug(show *Show, debugW io.Writer) (Timeline, error) {
 }
 
 
-func (tl *Timeline) addConstraint(kind constraintKind, a, b *TimelineCell) {
-	tl.constraints = append(tl.constraints, constraint{kind: kind, a: a, b: b})
+func (tl *Timeline) addSameRow(a, b *TimelineCell) {
+	tl.sameRows = append(tl.sameRows, sameRowConstraint{a: a, b: b})
 }
 
 func (track *TimelineTrack) appendCells(cells ...*TimelineCell) {
@@ -305,7 +288,7 @@ func (tl *Timeline) buildConstraints() {
 		for _, target := range trigger.Targets {
 			t := tl.findCell(target.Block, target.Hook)
 			if source.track != t.track {
-				tl.addConstraint(constraintSameRow, source, t)
+				tl.addSameRow(source, t)
 				source.Type = CellSignal
 			}
 			group.members = append(group.members, t)
@@ -327,7 +310,7 @@ func (tl *Timeline) assignRows() error {
 		tl.debugf("converged after %d iterations", i)
 		return nil
 	}
-	for _, c := range tl.constraints {
+	for _, c := range tl.sameRows {
 		if !c.satisfied() {
 			return fmt.Errorf("assignRows: unsatisfied %s", c)
 		}
@@ -341,21 +324,16 @@ func (tl *Timeline) assignRows() error {
 }
 
 func (tl *Timeline) enforceConstraints(iter int) bool {
-	for _, c := range tl.constraints {
+	for _, c := range tl.sameRows {
 		if c.satisfied() {
 			continue
 		}
-		switch c.kind {
-		case constraintSameRow:
-			if c.a.row < c.b.row {
-				tl.debugf("iter %d: constraint %s: insert gap on %s before r%d", iter, c, c.a.track.ID, c.a.row)
-				tl.insertGap(c.a.track, c.a.row)
-			} else {
-				tl.debugf("iter %d: constraint %s: insert gap on %s before r%d", iter, c, c.b.track.ID, c.b.row)
-				tl.insertGap(c.b.track, c.b.row)
-			}
-		default:
-			panic("invalid constraint kind: " + string(c.kind))
+		if c.a.row < c.b.row {
+			tl.debugf("iter %d: constraint %s: insert gap on %s before r%d", iter, c, c.a.track.ID, c.a.row)
+			tl.insertGap(c.a.track, c.a.row)
+		} else {
+			tl.debugf("iter %d: constraint %s: insert gap on %s before r%d", iter, c, c.b.track.ID, c.b.row)
+			tl.insertGap(c.b.track, c.b.row)
 		}
 		return true
 	}

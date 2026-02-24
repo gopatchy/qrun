@@ -170,6 +170,8 @@ func BuildTimelineDebug(show *Show, debugW io.Writer) (Timeline, error) {
 
 	tl.buildTracks()
 	tl.indexBlocks()
+	tl.linkTriggers()
+	tl.computeWeights()
 	tl.buildCells()
 	tl.buildConstraints()
 	if err := tl.assignRows(); err != nil {
@@ -200,15 +202,68 @@ func (tl *Timeline) indexBlocks() {
 	}
 }
 
+func (tl *Timeline) linkTriggers() {
+	for _, block := range tl.show.Blocks {
+		block.triggers = nil
+	}
+	for _, trigger := range tl.show.Triggers {
+		trigger.Source.block = tl.Blocks[trigger.Source.Block]
+		trigger.Source.block.triggers = append(trigger.Source.block.triggers, trigger)
+		for i := range trigger.Targets {
+			trigger.Targets[i].block = tl.Blocks[trigger.Targets[i].Block]
+		}
+	}
+}
+
+func (tl *Timeline) computeWeights() {
+	for _, block := range tl.show.Blocks {
+		block.weight = 0
+	}
+
+	for _, trigger := range tl.show.Triggers {
+		if trigger.Source.block.Type != "cue" {
+			continue
+		}
+		for _, target := range trigger.Targets {
+			if target.Hook == "END" || target.Hook == "FADE_OUT" {
+				if target.block.weight < 1 {
+					target.block.weight = 1
+				}
+			}
+		}
+	}
+
+	for _, block := range tl.show.Blocks {
+		if block.Type == "cue" {
+			tl.computeWeightDFS(block)
+		}
+	}
+}
+
+func (tl *Timeline) computeWeightDFS(b *Block) int {
+	maxChild := 0
+	for _, trigger := range b.triggers {
+		for _, target := range trigger.Targets {
+			w := tl.computeWeightDFS(target.block)
+			if w > maxChild {
+				maxChild = w
+			}
+		}
+	}
+	if maxChild > b.weight {
+		b.weight = maxChild
+	}
+	return b.weight
+}
+
 func (tl *Timeline) findEndChains() map[string]bool {
 	endChains := map[string]bool{}
 	for _, trigger := range tl.show.Triggers {
 		if trigger.Source.Signal != "END" {
 			continue
 		}
-		srcTrack := tl.Blocks[trigger.Source.Block].Track
 		for _, target := range trigger.Targets {
-			if target.Hook == "START" && tl.Blocks[target.Block].Track == srcTrack {
+			if target.Hook == "START" && target.block.Track == trigger.Source.block.Track {
 				endChains[trigger.Source.Block] = true
 			}
 		}

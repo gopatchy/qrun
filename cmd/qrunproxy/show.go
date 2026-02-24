@@ -20,7 +20,8 @@ type Block struct {
 	Name  string `json:"name"`
 	Loop  bool   `json:"loop,omitempty"`
 
-	weight int
+	weight   int
+	triggers []*Trigger
 }
 
 type Trigger struct {
@@ -39,11 +40,15 @@ func (t *Trigger) String() string {
 type TriggerSource struct {
 	Block  string `json:"block"`
 	Signal string `json:"signal"`
+
+	block *Block
 }
 
 type TriggerTarget struct {
 	Block string `json:"block"`
 	Hook  string `json:"hook"`
+
+	block *Block
 }
 
 func (block *Block) hasDefinedTiming() bool {

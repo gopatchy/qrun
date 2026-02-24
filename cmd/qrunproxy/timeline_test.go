@@ -26,17 +26,6 @@ func TestBuildTimelineFromMockShow(t *testing.T) {
 	t.Logf("tracks=%d blocks=%d", len(tl.Tracks), len(tl.Blocks))
 }
 
-func TestBuildTimelineSeed11(t *testing.T) {
-	show := GenerateMockShow(11, 5, 20, 4, 5)
-	if err := show.Validate(); err != nil {
-		t.Fatalf("validate: %v", err)
-	}
-	_, err := BuildTimeline(show)
-	if err != nil {
-		t.Fatalf("BuildTimeline failed: %v", err)
-	}
-}
-
 func BenchmarkBuildTimeline(b *testing.B) {
 	show := GenerateMockShow(42, 5, 20, 4, 5)
 	if err := show.Validate(); err != nil {

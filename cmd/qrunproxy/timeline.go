@@ -1,7 +1,6 @@
 package main
 
 import (
-	"cmp"
 	"fmt"
 	"io"
 	"slices"
@@ -201,7 +200,7 @@ func BuildTimelineDebug(show *Show, debugW io.Writer) (Timeline, error) {
 		tl.Blocks[block.ID] = block
 	}
 
-	sortedBlocks := tl.sortBlocks()
+	sortedBlocks := tl.show.Blocks
 
 	endChains := map[string]bool{}
 	for _, trigger := range show.Triggers {
@@ -225,38 +224,6 @@ func BuildTimelineDebug(show *Show, debugW io.Writer) (Timeline, error) {
 	return tl, nil
 }
 
-func (tl *Timeline) sortBlocks() []*Block {
-	cueIdx := 0
-	for _, b := range tl.show.Blocks {
-		if b.Type == "cue" {
-			b.weight = uint64(cueIdx+1) << 32
-			cueIdx++
-		} else {
-			b.weight = 0
-		}
-	}
-
-	changed := true
-	for changed {
-		changed = false
-		for _, t := range tl.show.Triggers {
-			src := tl.Blocks[t.Source.Block]
-			for _, target := range t.Targets {
-				dst := tl.Blocks[target.Block]
-				if dst.weight <= src.weight {
-					dst.weight = src.weight + 1
-					changed = true
-				}
-			}
-		}
-	}
-
-	sorted := slices.Clone(tl.show.Blocks)
-	slices.SortFunc(sorted, func(a, b *Block) int {
-		return cmp.Compare(a.weight, b.weight)
-	})
-	return sorted
-}
 
 func (tl *Timeline) addConstraint(kind constraintKind, a, b *TimelineCell) {
 	tl.constraints = append(tl.constraints, constraint{kind: kind, a: a, b: b})

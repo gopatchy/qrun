@@ -19,8 +19,6 @@ type Block struct {
 	Track string `json:"track,omitempty"`
 	Name  string `json:"name"`
 	Loop  bool   `json:"loop,omitempty"`
-
-	weight uint64
 }
 
 type Trigger struct {
